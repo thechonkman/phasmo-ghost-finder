@@ -1,7 +1,7 @@
 // Phasmo Ghost Finder - desktop overlay
 // Starts OBS with its replay buffer, saves clips on a global hotkey,
 // and shows the ghost finder in an always-on-top window.
-const { app, BrowserWindow, ipcMain, globalShortcut, shell, dialog, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, globalShortcut, shell, dialog, Menu, screen } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn, execFile } = require("child_process");
@@ -165,8 +165,15 @@ function registerHotkeys() {
 
 // ---------- window ----------
 function createWindow() {
+  // Reuse the last window size and position if it still fits on a connected screen.
+  let b = cfg.bounds && Number.isFinite(cfg.bounds.width) ? cfg.bounds : null;
+  if (b) {
+    const area = screen.getDisplayMatching(b).workArea;
+    const visible = b.x < area.x + area.width - 60 && b.x + b.width > area.x + 60 && b.y >= area.y - 20 && b.y < area.y + area.height - 60;
+    if (!visible) b = null;
+  }
   win = new BrowserWindow({
-    width: 460, height: 820, minWidth: 340, minHeight: 300,
+    width: b ? b.width : 460, height: b ? b.height : 820, ...(b ? { x: b.x, y: b.y } : {}), minWidth: 340, minHeight: 300,
     title: "Phasmo Ghost Finder",
     backgroundColor: "#0d0e12",
     alwaysOnTop: cfg.alwaysOnTop,
@@ -179,6 +186,11 @@ function createWindow() {
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (e, url) => { if (!url.startsWith("file://")) { e.preventDefault(); if (/^https:\/\//.test(url)) shell.openExternal(url); } });
+  let boundsTimer = null;
+  const keepBounds = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(() => { if (win && !win.isDestroyed() && !win.isMinimized()) { cfg.bounds = win.getBounds(); saveCfg(); } }, 500); };
+  win.on("move", keepBounds);
+  win.on("resize", keepBounds);
+  win.on("close", () => { if (!win.isMinimized()) { cfg.bounds = win.getBounds(); saveCfg(); } });
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
   win.webContents.on("did-finish-load", () => pushStatus());
 }
