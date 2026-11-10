@@ -1,0 +1,14 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("phasmo", {
+  launchObs: () => ipcRenderer.invoke("obs:launch"),
+  connectObs: () => ipcRenderer.invoke("obs:connect"),
+  saveClip: () => ipcRenderer.invoke("obs:save"),
+  showClip: () => ipcRenderer.invoke("clip:show"),
+  openSite: () => ipcRenderer.invoke("site:open"),
+  getSettings: () => ipcRenderer.invoke("cfg:get"),
+  setSettings: (patch) => ipcRenderer.invoke("cfg:set", patch),
+  browseObs: () => ipcRenderer.invoke("cfg:browseObs"),
+  setOpacity: (v) => ipcRenderer.invoke("win:opacity", v),
+  onStatus: (fn) => ipcRenderer.on("obs:status", (_e, d) => fn(d))
+});

@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'none'">
+</head><body>
+<title>Phasmo Ghost Finder</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky case-file bar; left column = journal controls + deduction questions, right = ghost board. Single dark "van at night" look. */
+:root{
+  --bg:#0d0e12; --panel:#15171e; --line:#262a35; --fg:#e4e2dc; --muted:#8d8f99;
+  --uv:#b394ff; --uv-dim:#3a2f5c; --found:#c7b3ff; --no:#e0675e; --no-dim:#3d1f1f;
+  --hint:#e8c26a; --ok:#7fcf9a;
+  --display:"Special Elite","Courier New",monospace;
+  --body:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--body);font-size:14px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--uv);outline-offset:2px}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding-block:10px}
+h1{font-family:var(--display);font-weight:400;font-size:20px;margin:0;letter-spacing:.02em}
+.diffchip{display:flex;align-items:center;gap:8px;background:var(--uv-dim);border:1px solid var(--uv);border-radius:6px;padding:5px 10px;font-size:13px}
+.diffchip b{font-weight:600}
+.count{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.count b{color:var(--fg);font-size:16px}
+.spacer{flex:1}
+.btn{background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--uv);color:#120d22;border-color:var(--uv);font-weight:600}
+main.wrap{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:20px;padding-block:18px 40px;align-items:start}
+@media (max-width:860px){main.wrap{grid-template-columns:1fr}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+section.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.box h2{font-family:var(--display);font-weight:400;font-size:16px;margin:0 0 4px;letter-spacing:.03em}
+.sub{color:var(--muted);font-size:12.5px;margin:0 0 10px}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:12px 0 6px}
+.evgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ev{display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 9px;font-size:13px;min-width:0}
+.ev .k{font-family:var(--mono);font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:0 4px}
+.ev .n{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.ev.found{border-color:var(--uv);background:var(--uv-dim);color:var(--found);box-shadow:0 0 12px -4px var(--uv)}
+.ev.ruled{border-color:var(--no);background:var(--no-dim);color:var(--no);text-decoration:line-through}
+.ev.dead{opacity:.35}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12.5px}
+.chip.on{border-color:var(--uv);background:var(--uv-dim);color:var(--found)}
+.chip.neg.on{border-color:var(--no);background:var(--no-dim);color:var(--no)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+input[type=number]{width:74px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:6px 8px;font-family:var(--mono)}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.warn{background:var(--no-dim);border:1px solid var(--no);color:#f3c2bd;border-radius:6px;padding:8px 10px;font-size:12.5px}
+.hintbar{background:#2b2414;border:1px solid var(--hint);color:#f2dfae;border-radius:6px;padding:8px 10px;font-size:12.5px}
+.q{border-top:1px solid var(--line);padding:10px 0}
+.q:first-of-type{border-top:0}
+.q p{margin:0 0 7px;font-size:13px}
+.q .ans{display:flex;flex-wrap:wrap;gap:6px}
+.q .ans button{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:4px 10px;font-size:12.5px}
+.q .ans button.on{border-color:var(--uv);background:var(--uv-dim);color:var(--found)}
+.q .eff{font-size:11.5px;color:var(--muted);margin-top:5px}
+.timer{font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums}
+.marks{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.marks span.hit{color:var(--hint)}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.card.lead{border-color:var(--uv);box-shadow:0 0 18px -8px var(--uv)}
+.card.hinted{border-color:var(--hint)}
+.card.out{opacity:.38}
+.card.out .gname{text-decoration:line-through}
+.ctop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.gname{font-family:var(--display);font-size:18px}
+.cbtn{background:none;border:1px solid var(--line);border-radius:4px;font-size:11px;padding:2px 7px;color:var(--muted)}
+.evs{display:flex;flex-wrap:wrap;gap:4px}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--muted)}
+.tag.f{border-color:var(--uv);color:var(--found)}
+.tag.x{border-color:var(--no);color:var(--no)}
+.tag.forced{text-decoration:underline;text-underline-offset:2px;font-weight:600}
+.stats{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;font-size:12px}
+.stats dt{color:var(--muted);font-family:var(--mono);font-size:11px}
+.stats dd{margin:0;min-width:0}
+.tells{margin:0;padding-left:16px;font-size:12.5px;color:#cfccc4}
+.tells li{margin:2px 0}
+.why{font-size:11.5px;color:var(--no)}
+.hy{font-size:11.5px;color:var(--hint)}
+.compact .tells,.compact .stats{display:none}
+.boardhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.boardhead h2{font-family:var(--display);font-weight:400;font-size:18px;margin:0}
+/* modal */
+.modal{position:fixed;inset:0;z-index:20;background:rgba(5,5,8,.82);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:max(24px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px))}
+.dlg{background:var(--panel);border:1px solid var(--uv);border-radius:10px;padding:20px;width:100%;max-width:520px}
+.dlg h2{font-family:var(--display);font-weight:400;font-size:22px;margin:0 0 4px}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+.dopt{text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:10px}
+.dopt b{display:block;font-weight:600}
+.dopt small{color:var(--muted);font-family:var(--mono)}
+.dopt.on{border-color:var(--uv);background:var(--uv-dim)}
+.custom{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:10px}
+select{background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px}
+kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:3px;padding:0 4px}
+.drop{border:1px dashed var(--muted);border-radius:8px;padding:14px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;background:var(--bg)}
+.drop.over{border-color:var(--uv);color:var(--found);background:var(--uv-dim)}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:4px;margin-top:8px}
+.thumbs figure{margin:0;position:relative}
+.thumbs img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:3px;border:1px solid var(--line)}
+.thumbs figcaption{position:absolute;right:2px;bottom:2px;font-family:var(--mono);font-size:9.5px;background:rgba(0,0,0,.7);padding:0 3px;border-radius:2px}
+textarea{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:7px 9px;font:inherit;font-size:13px;resize:vertical;min-height:52px}
+.ai{margin-top:10px;font-size:13px;display:flex;flex-direction:column;gap:8px}
+.ai .seen{white-space:pre-wrap}
+.ai ul{margin:0;padding-left:16px}
+.ai label{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;padding:3px 0}
+.ai label input{margin-top:3px}
+.ai .grp{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.chat{white-space:pre-wrap;font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+.chat:empty{display:none}
+.status{font-size:12px;color:var(--muted)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--no);margin-right:6px;vertical-align:middle}
+.dot.on{background:var(--ok)}
+.set{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12.5px;margin-top:8px}
+.set input[type=text],.set input[type=password],.set input[type=number]{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:5px 7px;font-family:var(--mono);font-size:12px}
+details summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-top:10px}
+.clipname{font-family:var(--mono);font-size:11.5px;word-break:break-all}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle">
+  <div class="dlg">
+    <h2 id="mtitle">What difficulty are you running?</h2>
+    <p class="sub">This sets how many evidence types the ghost will show, which changes how the finder rules ghosts out.</p>
+    <div class="dgrid" id="dgrid"></div>
+    <div class="custom" id="customBox" hidden>
+      <div class="row"><label for="cEvi">Evidence given</label>
+        <select id="cEvi"><option value="3">3</option><option value="2">2</option><option value="1">1</option><option value="0">0</option></select></div>
+      <div class="row"><label for="cSpeed">Ghost speed</label>
+        <select id="cSpeed"><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select></div>
+      <p class="note" style="margin:0">Other custom settings (sanity, hunt duration, fingerprint chance, roaming) don't change which ghost it can be, so they aren't needed here. Low fingerprint chance can hide UV, so be careful ruling UV out.</p>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn primary" id="startBtn">Start investigation</button></div>
+  </div>
+</div>
+
+<header><div class="wrap">
+  <h1>Phasmo Ghost Finder</h1>
+  <button class="diffchip" id="diffChip" title="Change difficulty"><span>Difficulty</span><b id="diffName">—</b><span id="diffEvi" class="count"></span></button>
+  <span class="count"><b id="remain">30</b> of 30 possible</span>
+  <span class="spacer"></span>
+  <button class="btn" id="compactBtn" aria-pressed="false">Compact</button>
+  <button class="btn" id="resetBtn">New contract <kbd>R</kbd></button>
+</div></header>
+
+<main class="wrap">
+  <div class="col">
+
+    <section class="box" id="obsBox" hidden>
+      <h2>OBS clips</h2>
+      <p class="sub" id="obsState"><span class="dot" id="obsDot"></span><span id="obsText">Connecting to OBS…</span></p>
+      <div class="row">
+        <button class="btn" id="obsStart">Start OBS</button>
+        <button class="btn primary" id="obsSave">Save clip <kbd id="saveKey">Ctrl+Shift+S</kbd></button>
+        <button class="btn" id="obsShow" disabled>Show clip</button>
+      </div>
+      <p class="note" id="clipInfo">No clip saved yet. Press the save hotkey in game right after something happens.</p>
+      <div class="row" style="margin-top:8px"><button class="btn" id="askOnline">Ask Claude about this clip</button></div>
+      <p class="note" style="margin-top:6px">Opens the online finder and shows the clip in its folder. There, press C or Choose clip to send it.</p>
+      <div id="obsErr"></div>
+      <details id="setBox"><summary>Settings</summary>
+        <div class="set">
+          <label for="sObs">OBS location</label><div class="row" style="flex-wrap:nowrap"><input type="text" id="sObs" placeholder="found automatically"><button class="btn" id="sBrowse">Browse</button></div>
+          <label for="sPort">WebSocket port</label><input type="number" id="sPort">
+          <label for="sPw">WebSocket password</label><input type="password" id="sPw" placeholder="from OBS → Tools → WebSocket Server Settings">
+          <label for="sSave">Save-clip hotkey</label><input type="text" id="sSave">
+          <label for="sToggle">Show/hide hotkey</label><input type="text" id="sToggle">
+          <label for="sOp">Window opacity</label><input type="range" id="sOp" min="0.3" max="1" step="0.05">
+        </div>
+        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sAuto"> Start OBS when this app opens</label>
+        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sTop"> Keep this window on top of the game</label>
+        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sShow"> Open the clip's folder after each save</label>
+        <p class="note">Hotkeys use names like Ctrl+Shift+S, Alt+F9 or F8.</p>
+        <div class="row"><button class="btn primary" id="sApply">Save settings</button><span class="status" id="sMsg"></span></div>
+      </details>
+    </section>
+    <section class="box">
+      <h2>Evidence</h2>
+      <p class="sub">Click once = found, twice = ruled out, three times = clear. Keys <kbd>1</kbd>–<kbd>7</kbd>. Counts show how many remaining ghosts have it.</p>
+      <div class="evgrid" id="evgrid"></div>
+      <div id="eviNote" class="note"></div>
+      <div id="eviWarn"></div>
+    </section>
+
+
+    <section class="box" id="aiBox">
+      <h2>Ask Claude about a clip</h2>
+      <p class="sub">Save a clip with <kbd>Win</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd> (Xbox Game Bar), then send it here. Claude looks at still frames, not sound, and only reports what it can clearly see.</p>
+      <div id="aiOff" class="note" hidden></div>
+      <div id="aiOn">
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn primary" id="newestBtn" hidden>Send newest clip</button>
+          <button class="btn" id="pickBtn">Choose clip <kbd>C</kbd></button>
+          <label class="note" style="margin:0;display:flex;gap:5px;align-items:center"><input type="checkbox" id="autoAsk" checked> Ask as soon as it loads</label>
+        </div>
+        <p class="note" id="folderNote" style="margin:0 0 8px" hidden></p>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a video clip or screenshots">Or drop a clip or screenshots here</div>
+        <input type="file" id="clipIn" accept="video/*,image/png,image/jpeg,image/webp" multiple hidden>
+        <div class="row" style="margin-top:8px">
+          <label for="nFrames" class="note" style="margin:0">Frames</label>
+          <select id="nFrames"><option>6</option><option selected>10</option><option>16</option></select>
+          <label class="note" style="margin:0;display:flex;gap:5px;align-items:center"><input type="checkbox" id="bright" checked> Brighten dark frames</label>
+        </div>
+        <div class="thumbs" id="thumbs"></div>
+        <div class="lbl">What happened? (optional)</div>
+        <textarea id="clipNote" placeholder="e.g. hunt started at 60% sanity, it walked past my closet"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn primary" id="askClip" disabled>Ask Claude</button><button class="btn" id="stopAi" hidden>Stop</button><span class="status" id="aiStatus"></span></div>
+        <div class="ai" id="aiOut"></div>
+        <div class="lbl" style="margin-top:14px">Ask anything about this contract</div>
+        <div class="row" style="flex-wrap:nowrap"><input id="chatIn" type="text" placeholder="e.g. what should I test next?" style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:7px 9px;font:inherit"><button class="btn" id="chatBtn">Ask</button></div>
+        <div class="chat" id="chatOut" style="margin-top:8px"></div>
+      </div>
+    </section>
+    <section class="box">
+      <h2>Hunt observations</h2>
+      <div class="lbl">Base speed you saw during a hunt (pick all you've seen)</div>
+      <div class="chips" id="speedChips"></div>
+      <div class="lbl">Line-of-sight speed-up (gets gradually faster while chasing you)</div>
+      <div class="chips" id="losChips"></div>
+      <div class="lbl">Highest average sanity a hunt started at</div>
+      <div class="row"><input type="number" id="huntSan" min="0" max="100" placeholder="%" aria-label="Highest average sanity at a hunt"><span class="note" style="margin:0">Leave blank if unsure. Ignore hunts forced by cursed possessions.</span></div>
+      <p class="note" id="speedNote"></p>
+    </section>
+
+    <section class="box" id="qBox">
+      <h2>Deduction questions</h2>
+      <p class="sub" id="qSub">Answer what you've seen. Each answer only rules ghosts out when the behaviour is certain. Skip anything you're unsure of.</p>
+      <div id="hints"></div>
+      <div id="qs"></div>
+    </section>
+
+    <section class="box" id="smBox">
+      <h2>Smudge timer</h2>
+      <p class="sub">Start when you smudge the ghost. Hunts before 90 s point to a Demon; before 180 s rules out a Spirit.</p>
+      <div class="row"><span class="timer" id="tm">0:00</span><button class="btn" id="tmBtn">Start</button><button class="btn" id="tmReset">Reset</button></div>
+      <div class="marks" id="tmMarks"><span data-t="60">60 s Demon</span> · <span data-t="90">90 s most ghosts</span> · <span data-t="180">180 s Spirit</span></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <div class="boardhead"><h2 id="boardTitle">Possible ghosts</h2><span class="note" style="margin:0">Underlined evidence is always shown when evidence is reduced (Nightmare, Insanity, custom 1–2). Click a card's button to rule it out by hand.</span></div>
+    <div class="board" id="board"></div>
+  </div>
+</main>
+
+<script>
+const EV={emf:"EMF 5",uv:"Ultraviolet",writing:"Ghost Writing",freezing:"Freezing",dots:"D.O.T.S.",orb:"Ghost Orb",box:"Spirit Box"};
+const EVK=["emf","uv","writing","freezing","dots","orb","box"];
+const DIFFS=[
+ {id:"amateur",n:"Amateur",e:3},{id:"intermediate",n:"Intermediate",e:3},{id:"professional",n:"Professional",e:3},
+ {id:"nightmare",n:"Nightmare",e:2},{id:"insanity",n:"Insanity",e:1},{id:"apoc",n:"Apocalypse / 0-evidence",e:0},
+ {id:"custom",n:"Custom",e:null}];
+// speeds: s slow(<1.7) n normal(1.7) f fast(>1.7, not counting LOS). los: yes / no / both. sp: [min,max] m/s for display scaling.
+const G=[
+ {id:"aswang",n:"Aswang",ev:["dots","freezing","writing"],hunt:"50%",max:50,spd:"{1.53} m/s base; fastest line-of-sight acceleration of any ghost",s:"s",los:"yes",
+  t:["A hunt ends without a kill if it reaches a player in an official closet or locker","Its next hunt heads straight for that player","Can move during the hunt grace period"]},
+ {id:"banshee",n:"Banshee",ev:["orb","uv","dots"],hunt:"50% of its target's sanity (not the average)",max:100,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Always female","Unique shriek on the parabolic mic / sound recorder","More singing ghost events; hunts one target"]},
+ {id:"dayan",n:"Dayan",ev:["emf","orb","box"],hunt:"65% if you move near it, 45% if you stand still",max:65,spd:"{2.25} m/s if you move within 10 m, {1.2} m/s if you stand still, {1.7} otherwise",s:"snf",los:"both",
+  t:["Always female","Speed reacts to whether the nearest player is moving or standing still"]},
+ {id:"deildegast",n:"Deildegast",ev:["emf","writing","dots"],hunt:"50%",max:50,spd:"{3.0} m/s, minus {0.1} per item players interacted with before the hunt (min {0.4})",s:"snf",los:"no",
+  t:["Fixed hunt speed that doesn't change with line of sight","Gets slower the more objects you've touched"]},
+ {id:"demon",n:"Demon",ev:["writing","uv","freezing"],hunt:"70%; can rarely hunt at any sanity",max:100,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Smudging prevents a hunt for only 60 s (others 90 s)","Crucifix range is larger","Shorter cooldown between hunts"]},
+ {id:"deogen",n:"Deogen",ev:["box","writing","dots"],f:"box",hunt:"40%",max:40,spd:"{3.0} m/s far away, ~{0.4} m/s within ~2.5 m of you",s:"sf",los:"no",
+  t:["Always knows where you are during a hunt","Heavy breathing response on the Spirit Box","Not chosen if host is below level 30"]},
+ {id:"gallu",n:"Gallu",ev:["emf","uv","box"],hunt:"50%; 60% enraged, 40% weakened",max:60,spd:"{1.7} normal, {1.955} enraged, {1.36} weakened",s:"snf",los:"both",
+  t:["Using protective gear (crucifix, salt, incense) enrages it","Enraged Gallu walks through salt without disturbing it","Calms down after hunting"]},
+ {id:"goryo",n:"Goryo",ev:["emf","uv","dots"],f:"dots",hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["D.O.T.S. only visible on a video camera with nobody in the room","Doesn't roam far or change favourite room"]},
+ {id:"hantu",n:"Hantu",ev:["orb","uv","freezing"],f:"freezing",hunt:"50%",max:50,spd:"{1.4} m/s in warm rooms up to {2.7} m/s below 0 °C",s:"snf",los:"no",
+  t:["Freezing breath visible during hunts when the fuse box is off","Never turns the fuse box on"]},
+ {id:"jinn",n:"Jinn",ev:["emf","uv","freezing"],hunt:"50%",max:50,spd:"{2.5} m/s with fuse box on and you far away in sight, {1.7} otherwise",s:"nf",los:"both",
+  t:["Never turns the fuse box off directly","Can drain a chunk of sanity nearby (fuse box on)"]},
+ {id:"kormos",n:"Kormos",ev:["orb","box","uv"],hunt:"50%; 70% if someone sprints in its room",max:70,spd:"{1.7} m/s, ×1.3 (~{2.21}) when it hears you from beyond 5 m",s:"nf",los:"both",
+  t:["Blind: can't see you unless you move within 5 m; hunts by sound","Never does mist-form or chasing ghost events","Same evidence as the Mimic minus the extra orbs"]},
+ {id:"mare",n:"Mare",ev:["writing","orb","box"],hunt:"60% in the dark, 40% in the light",max:60,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Turns a light off right after you turn it on","Never turns a light on","Can roam far from its room"]},
+ {id:"moroi",n:"Moroi",ev:["writing","freezing","box"],f:"box",hunt:"50%",max:50,spd:"{1.5} m/s at high sanity up to {2.25} m/s at very low sanity",s:"snf",los:"yes",
+  t:["Spirit Box / parabolic responses curse you (faster sanity drain)","Incense blinds it 50% longer"]},
+ {id:"myling",n:"Myling",ev:["writing","emf","uv"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Hunt footsteps and vocals only audible within ~12 m (others 20 m)","Frequent paranormal sounds on the parabolic mic"]},
+ {id:"obake",n:"Obake",ev:["emf","orb","uv"],f:"uv",hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Sometimes leaves six-finger prints","Briefly changes model during a hunt","Prints can fade faster or not appear"]},
+ {id:"obambo",n:"Obambo",ev:["writing","uv","dots"],hunt:"65% aggressive, 10% calm",max:65,spd:"{1.955} aggressive, {1.445} calm",s:"sf",los:"both",
+  t:["Switches between calm and aggressive about every 2 minutes","Aggressive hunts are shorter"]},
+ {id:"oni",n:"Oni",ev:["dots","emf","freezing"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Never does the airball ghost event","More visible during hunts","More active with players nearby"]},
+ {id:"onryo",n:"Onryo",ev:["orb","freezing","box"],hunt:"60%; can hunt at any sanity after blowing out 3 flames",max:100,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["A lit flame nearby blocks its hunt like a crucifix","Hunts after its third extinguished flame"]},
+ {id:"phantom",n:"Phantom",ev:["dots","uv","box"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Disappears when photographed during an event","Less visible (slower flicker) during hunts","Sometimes walks to a random player"]},
+ {id:"poltergeist",n:"Poltergeist",ev:["writing","uv","box"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Throws several objects at once, at high speed","Powerless with nothing to throw"]},
+ {id:"raiju",n:"Raiju",ev:["dots","emf","orb"],hunt:"65% near active electronics, 50% otherwise",max:65,spd:"{2.5} m/s near active electronics, {1.7} otherwise",s:"nf",los:"both",
+  t:["Disrupts electronics from 15 m during hunts (others 10 m)"]},
+ {id:"revenant",n:"Revenant",ev:["writing","orb","freezing"],hunt:"50%",max:50,spd:"{1.0} m/s searching, {3.0} m/s once it detects you",s:"sf",los:"no",
+  t:["Crawls slowly until it spots you, then is very fast","Slows back down after losing you"]},
+ {id:"shade",n:"Shade",ev:["writing","emf","freezing"],hunt:"35%",max:35,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Can't start a hunt while a player is in its room","Shy; fewer interactions"]},
+ {id:"spirit",n:"Spirit",ev:["writing","emf","box"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Smudging prevents a hunt for 180 s (others 90 s)"]},
+ {id:"thaye",n:"Thaye",ev:["dots","writing","orb"],hunt:"75% young down to 15% old",max:75,spd:"{2.75} m/s young down to {1.0} m/s old",s:"snf",los:"no",
+  t:["Very active early, ages and slows over time near players"]},
+ {id:"mimic",n:"The Mimic",ev:["box","uv","freezing"],hunt:"Copies the ghost it's mimicking",max:100,spd:"Copies the ghost it's mimicking",s:"snf",los:"both",
+  t:["Always shows fake Ghost Orbs as an extra, even on 0 evidence","Changes which ghost it copies every 30–120 s"]},
+ {id:"twins",n:"The Twins",ev:["emf","freezing","box"],hunt:"50%",max:50,spd:"{1.5} m/s or {1.9} m/s depending on which twin hunts",s:"sf",los:"yes",
+  t:["Two interactions at almost the same time in different places"]},
+ {id:"wraith",n:"Wraith",ev:["dots","emf","box"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Never steps in salt","Teleports to players (EMF 2 near them)"]},
+ {id:"yokai",n:"Yokai",ev:["dots","orb","box"],hunt:"80% while you talk near it, 50% otherwise",max:80,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Only hears you within ~2.5 m during hunts"]},
+ {id:"yurei",n:"Yurei",ev:["dots","orb","freezing"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
+  t:["Slams a door fully shut with a sanity drop","Smudging traps it in its room for a while"]}
+];
+const ALL=G.map(g=>g.id), NOT=(...k)=>ALL.filter(i=>!k.includes(i)&&i!=="mimic");
+// Questions. elim lists never include the Mimic (it copies other ghosts' behaviour).
+const QS=[
+ {id:"male",q:"Is the ghost male (name in the journal, or the model you saw)?",a:[{l:"Male",elim:["banshee","dayan"]},{l:"Female"}]},
+ {id:"salt",q:"Did the ghost step in salt (footprints or a disturbed pile)?",a:[{l:"Yes",elim:["wraith"]},{l:"Not yet"}]},
+ {id:"lighton",q:"Did the ghost turn a light ON?",a:[{l:"Yes",elim:["mare"]},{l:"Not yet"}]},
+ {id:"lightquick",q:"Did it switch a light off right after someone switched it on?",a:[{l:"Yes",hint:["mare"]},{l:"No"}]},
+ {id:"fuseon",q:"Did the ghost turn the fuse box ON?",a:[{l:"Yes",elim:["hantu"]},{l:"Not yet"}]},
+ {id:"fuseoff",q:"Did the ghost switch the fuse box OFF itself (not tripped by too many lights)?",a:[{l:"Yes",elim:["jinn"]},{l:"Not yet"}]},
+ {id:"breath",q:"In a hunt with the fuse box off, did you get a clear look at the ghost? Was there freezing breath?",a:[{l:"Yes, breath",hint:["hantu"]},{l:"Clear look, no breath",elim:["hantu"]},{l:"Didn't see"}]},
+ {id:"closet",q:"Did the ghost reach someone in a closet or locker and the hunt simply ended?",a:[{l:"Yes",hint:["aswang"]},{l:"No"}]},
+ {id:"closetkill",q:"Did the ghost kill someone inside an official closet or locker?",a:[{l:"Yes",elim:["aswang"]},{l:"No"}]},
+ {id:"airball",q:"Did you see the airball event (a smoky orb floating at you)?",a:[{l:"Yes",elim:["oni"]},{l:"Not yet"}]},
+ {id:"mist",q:"Did you see a mist-form or chasing ghost event?",a:[{l:"Yes",elim:["kormos"]},{l:"Not yet"}]},
+ {id:"photo",q:"You photographed the ghost during an event. Did it vanish when the photo was taken?",a:[{l:"Vanished",hint:["phantom"]},{l:"Stayed visible",elim:["phantom"]},{l:"No photo yet"}]},
+ {id:"obake",q:"Did you see a six-finger print, or the ghost change model for a moment mid-hunt?",a:[{l:"Yes",hint:["obake"]},{l:"No"}]},
+ {id:"shade",q:"Did a hunt start while a player was standing in the ghost's room?",a:[{l:"Yes",elim:["shade"]},{l:"No / unsure"}]},
+ {id:"smudge",q:"After smudging the ghost, when did it next hunt? (use the timer)",a:[{l:"Under 90 s",elim:NOT("demon")},{l:"90–180 s",elim:["spirit"]},{l:"After 180 s / no hunt"}]},
+ {id:"myling",q:"Could you hear its hunt footsteps or vocals from further than ~12 m away?",a:[{l:"Yes",elim:["myling"]},{l:"Only up close",hint:["myling"]},{l:"Unsure"}]},
+ {id:"dotseye",q:"Did you see the D.O.T.S. silhouette with your own eyes (not on camera)?",a:[{l:"Yes",elim:["goryo"]},{l:"Only on camera",hint:["goryo"]},{l:"Not seen"}]},
+ {id:"twins",q:"Did two interactions happen at almost the same moment in different places?",a:[{l:"Yes",hint:["twins"]},{l:"No"}]},
+ {id:"breathbox",q:"Did the Spirit Box give heavy breathing instead of words?",a:[{l:"Yes",hint:["deogen"]},{l:"No"}]},
+ {id:"wail",q:"Did the parabolic mic or sound recorder catch a shrieking wail?",a:[{l:"Yes",hint:["banshee"]},{l:"No"}]},
+ {id:"kormos",q:"In a hunt, did it pass within a few metres of you while you stood silent and still, without noticing you?",a:[{l:"Yes",hint:["kormos"]},{l:"No"}]},
+ {id:"multithrow",q:"Did it throw several objects at once?",a:[{l:"Yes",hint:["poltergeist"]},{l:"No"}]},
+ {id:"aging",q:"Did hunts start fast and get clearly slower over the contract (without you touching lots of items)?",a:[{l:"Yes",hint:["thaye"]},{l:"No"}]},
+];
+const S={diff:null,evi:3,speedMod:1,ev:{},speeds:new Set(),los:null,hunt:null,ans:{},manual:new Set(),compact:false};
+const $=id=>document.getElementById(id);
+
+function fmtSpeed(str){ return str.replace(/\{([\d.]+)\}/g,(m,v)=>{const x=+v*S.speedMod; return S.speedMod===1?v:String(+x.toFixed(2));}); }
+
+function evVerdict(g){
+  const N=S.evi, found=EVK.filter(k=>S.ev[k]==="f"), ruled=EVK.filter(k=>S.ev[k]==="x");
+  const mim=g.id==="mimic";
+  if(mim&&ruled.includes("orb")) return "Mimic always shows Ghost Orbs";
+  const real=found.filter(k=>!(mim&&k==="orb"));
+  for(const k of real) if(!g.ev.includes(k)) return `doesn't have ${EV[k]}`;
+  if(real.length>N) return N===0?"0-evidence game: it can't show evidence":`only ${N} evidence on this difficulty`;
+  if(N===3){ for(const k of ruled) if(g.ev.includes(k)) return `${EV[k]} ruled out`; }
+  if(N>0&&N<3&&g.f){
+    if(ruled.includes(g.f)) return `${EV[g.f]} is always shown for ${g.n}`;
+    if(!real.includes(g.f)&&real.length>=N) return `${EV[g.f]} would have to be one of its ${N}`;
+  }
+  const left=g.ev.filter(k=>!ruled.includes(k));
+  if(left.length<N) return `can't show ${N} evidence with those ruled out`;
+  return null;
+}
+function behVerdict(g){
+  if(g.id==="mimic") return null;
+  if(S.speeds.size){ for(const sp of S.speeds) if(!g.s.includes(sp)) return `can't hunt at that speed`; }
+  if(S.los==="yes"&&g.los==="no") return "no line-of-sight speed-up";
+  if(S.los==="no"&&g.los==="yes") return "always speeds up with line of sight";
+  if(S.hunt!=null&&S.hunt>g.max) return `can't hunt above ${g.max}%`;
+  for(const q of QS){ const a=S.ans[q.id]; if(a==null) continue; const ans=q.a[a];
+    if(ans.elim&&ans.elim.includes(g.id)) return `ruled out: "${ans.l}" on ${q.id==="smudge"?"smudge timing":"a question"}`; }
+  return null;
+}
+function hintsFor(g){ const h=[]; for(const q of QS){const a=S.ans[q.id]; if(a==null) continue; const ans=q.a[a]; if(ans.hint&&ans.hint.includes(g.id)) h.push(q.q);} return h; }
+
+function computeRows(){return G.map(g=>{const why=S.manual.has(g.id)?"ruled out by you":(evVerdict(g)||behVerdict(g)); return {g,why,h:why?[]:hintsFor(g)};});}
+function render(){
+  const rows=computeRows();
+  const alive=rows.filter(r=>!r.why);
+  $("remain").textContent=alive.length;
+  // evidence buttons
+  const N=S.evi;
+  $("evgrid").innerHTML=EVK.map((k,i)=>{const st=S.ev[k]; const c=alive.filter(r=>r.g.ev.includes(k)||(k==="orb"&&r.g.id==="mimic")).length;
+    const dead=N===0&&k!=="orb"&&!st;
+    return `<button class="ev ${st==="f"?"found":st==="x"?"ruled":""} ${dead?"dead":""}" data-ev="${k}" aria-label="${EV[k]}"><span><span class="k">${i+1}</span> ${EV[k]}</span><span class="n">${st?"":c+"/"+alive.length}</span></button>`;}).join("");
+  const notes={3:"All three evidence types will show. Ruling one out removes every ghost that has it.",
+   2:"Nightmare-style: 2 of 3 shown. Ruling evidence out only removes ghosts once they can't show 2, or if it's their guaranteed evidence.",
+   1:"Insanity-style: 1 of 3 shown. Once you find one, other evidence won't appear (except Mimic orbs). Lean on the questions below.",
+   0:"No evidence will show, except the Mimic's fake Ghost Orbs. Orbs = Mimic. Use the hunt observations and questions below."};
+  $("eviNote").textContent=notes[N];
+  const realFound=EVK.filter(k=>S.ev[k]==="f");
+  $("eviWarn").innerHTML=!alive.length?`<div class="warn" style="margin-top:8px">No ghost matches everything you've marked. Something was misread (common: ruling out UV too early, or a cursed-possession hunt). Clear the least certain mark.</div>`:
+   (realFound.length===N&&N<3&&N>0?`<div class="note">You've found all ${N} evidence for this difficulty${realFound.includes("orb")?"":" (unless orbs appear, which means Mimic)"}.</div>`:"");
+  // hints
+  const hinted=alive.filter(r=>r.h.length);
+  $("hints").innerHTML=hinted.length?`<div class="hintbar" style="margin-bottom:8px">Strong tells for: ${hinted.map(r=>r.g.n).join(", ")}</div>`:"";
+  // board
+  rows.sort((a,b)=>(!!a.why-!!b.why)||(b.h.length-a.h.length)||a.g.n.localeCompare(b.g.n));
+  $("boardTitle").textContent=alive.length===1?`It's the ${alive[0].g.n}`:alive.length?"Possible ghosts":"No match";
+  $("board").innerHTML=rows.map(({g,why,h})=>{
+    const tags=g.ev.map(k=>`<span class="tag ${S.ev[k]==="f"?"f":S.ev[k]==="x"?"x":""} ${g.f===k?"forced":""}">${EV[k]}</span>`).join("")+(g.id==="mimic"?`<span class="tag ${S.ev.orb==="f"?"f":S.ev.orb==="x"?"x":""}">+ fake Orbs</span>`:"");
+    return `<article class="card ${why?"out":""} ${!why&&alive.length===1?"lead":""} ${!why&&h.length?"hinted":""}">
+     <div class="ctop"><span class="gname">${g.n}</span><button class="cbtn" data-man="${g.id}">${S.manual.has(g.id)?"Restore":"Rule out"}</button></div>
+     <div class="evs">${tags}</div>
+     ${why?`<div class="why">${why}</div>`:""}${h.length?`<div class="hy">Matches: ${h.length} tell${h.length>1?"s":""} you reported</div>`:""}
+     <dl class="stats"><dt>HUNTS</dt><dd>${g.hunt}</dd><dt>SPEED</dt><dd>${fmtSpeed(g.spd)}</dd><dt>LOS</dt><dd>${g.los==="yes"?"Speeds up with line of sight":g.los==="no"?"No line-of-sight speed-up":"Depends on its state"}</dd></dl>
+     <ul class="tells">${g.t.map(t=>`<li>${t}</li>`).join("")}</ul></article>`;}).join("");
+  // chips
+  $("speedChips").innerHTML=[["s","Slow (under 1.7)"],["n","Normal (1.7)"],["f","Fast (over 1.7, from the start)"]].map(([k,l])=>`<button class="chip ${S.speeds.has(k)?"on":""}" data-sp="${k}">${l}</button>`).join("");
+  $("losChips").innerHTML=[["yes","Yes, it sped up"],["no","No, steady speed"]].map(([k,l])=>`<button class="chip ${S.los===k?"on":""}" data-los="${k}">${l}</button>`).join("");
+  $("speedNote").textContent=S.speedMod!==1?`Ghost speed is set to ${S.speedMod*100}%. Speeds on the cards are already scaled; "normal" means ${(1.7*S.speedMod).toFixed(2)} m/s.`:"Normal ghost speed is 1.7 m/s. Footstep rhythm is the easiest way to judge it.";
+  // questions
+  $("qs").innerHTML=QS.map(q=>`<div class="q"><p>${q.q}</p><div class="ans">${q.a.map((a,i)=>`<button data-q="${q.id}" data-a="${i}" class="${S.ans[q.id]===i?"on":""}">${a.l}</button>`).join("")}</div></div>`).join("");
+  $("qSub").textContent=N<=1?"With little or no evidence these do most of the work. Each answer only rules ghosts out when the behaviour is certain; skip anything you're unsure of.":"Answer what you've seen. Each answer only rules ghosts out when the behaviour is certain. Skip anything you're unsure of.";
+  document.body.classList.toggle("compact",S.compact);
+  // move questions up on low evidence
+  const col=$("qBox").parentElement; if(N<=1) col.insertBefore($("qBox"),col.children[1]); else col.insertBefore($("qBox"),$("smBox"));
+}
+
+// difficulty modal
+let pick=null;
+function drawDiff(){ $("dgrid").innerHTML=DIFFS.map(d=>`<button class="dopt ${pick===d.id?"on":""}" data-d="${d.id}"><b>${d.n}</b><small>${d.e==null?"set below":d.e+" evidence"}</small></button>`).join(""); $("customBox").hidden=pick!=="custom"; }
+$("dgrid").onclick=e=>{const b=e.target.closest("[data-d]"); if(!b) return; pick=b.dataset.d; drawDiff();};
+$("startBtn").onclick=()=>{ if(!pick){ $("mtitle").textContent="Pick a difficulty first"; return; }
+  const d=DIFFS.find(x=>x.id===pick); S.diff=d;
+  S.evi=d.e==null?+$("cEvi").value:d.e; S.speedMod=d.e==null?+$("cSpeed").value:1;
+  $("diffName").textContent=d.n; $("diffEvi").textContent=`${S.evi} ev${S.speedMod!==1?" · "+S.speedMod*100+"% speed":""}`;
+  $("modal").hidden=true; render(); };
+$("diffChip").onclick=()=>{ $("mtitle").textContent="What difficulty are you running?"; $("modal").hidden=false; drawDiff(); };
+
+document.addEventListener("click",e=>{
+  const ev=e.target.closest("[data-ev]"); if(ev){const k=ev.dataset.ev; S.ev[k]=S.ev[k]==null?"f":S.ev[k]==="f"?"x":undefined; if(!S.ev[k]) delete S.ev[k]; render(); return;}
+  const sp=e.target.closest("[data-sp]"); if(sp){const k=sp.dataset.sp; S.speeds.has(k)?S.speeds.delete(k):S.speeds.add(k); render(); return;}
+  const lo=e.target.closest("[data-los]"); if(lo){S.los=S.los===lo.dataset.los?null:lo.dataset.los; render(); return;}
+  const q=e.target.closest("[data-q]"); if(q){const id=q.dataset.q,a=+q.dataset.a; S.ans[id]===a?delete S.ans[id]:S.ans[id]=a; render(); return;}
+  const m=e.target.closest("[data-man]"); if(m){const id=m.dataset.man; S.manual.has(id)?S.manual.delete(id):S.manual.add(id); render();}
+});
+$("huntSan").oninput=e=>{const v=e.target.value.trim(); S.hunt=v===""?null:Math.max(0,Math.min(100,+v)); render();};
+$("compactBtn").onclick=e=>{S.compact=!S.compact; e.currentTarget.setAttribute("aria-pressed",S.compact); render();};
+function reset(){ S.ev={};S.speeds.clear();S.los=null;S.hunt=null;S.ans={};S.manual.clear();$("huntSan").value="";lastAI=null;chatTurns=[];$("aiOut").innerHTML="";$("chatOut").textContent="";tmStop();tmT=0;tmDraw(); $("mtitle").textContent="What difficulty are you running?"; $("modal").hidden=false; drawDiff(); render(); }
+$("resetBtn").onclick=reset;
+document.addEventListener("keydown",e=>{ if(["INPUT","SELECT","TEXTAREA"].includes(e.target.tagName)||!$("modal").hidden) return;
+  if(e.key>="1"&&e.key<="7"){const k=EVK[+e.key-1]; S.ev[k]=S.ev[k]==null?"f":S.ev[k]==="f"?"x":undefined; if(!S.ev[k]) delete S.ev[k]; render();}
+  else if(e.key==="r"||e.key==="R") reset();
+  else if((e.key==="c"||e.key==="C")&&!$("aiOn").hidden) { if(!$("newestBtn").hidden) $("newestBtn").click(); else $("clipIn").click(); } else if(e.key==="t"||e.key==="T") $("tmBtn").click(); });
+
+// smudge timer
+let tmT=0,tmI=null,tmStart=0;
+function tmDraw(){const s=Math.floor(tmT); $("tm").textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; document.querySelectorAll("#tmMarks span").forEach(x=>x.classList.toggle("hit",tmT>=+x.dataset.t));}
+function tmStop(){clearInterval(tmI);tmI=null;$("tmBtn").textContent="Start";}
+$("tmBtn").onclick=()=>{ if(tmI){tmStop();return;} tmStart=Date.now()-tmT*1000; tmI=setInterval(()=>{tmT=(Date.now()-tmStart)/1000;tmDraw();},250); $("tmBtn").textContent="Stop"; };
+$("tmReset").onclick=()=>{tmStop();tmT=0;tmDraw();};
+
+// ---------- Ask Claude ----------
+let sample=null, frames=[], aiCtl=null, lastAI=null, chatTurns=[];
+const AI_ERR={not_granted:"Claude access was declined for this page.",sampling_disabled:"Claude isn't available on this account.",rate_limited:"Too many requests right now. Wait a minute and try again.",session_expired:"Sign in to claude.ai again, then retry.",image_rejected:"One of the frames couldn't be used. Try another clip.",images_unavailable:"This view can't send images to Claude.",refused:"Claude declined that request.",invalid_json:"Claude's answer came back garbled. Try again.",empty_completion:"Claude returned nothing. Try again with fewer frames."};
+const errText=e=>AI_ERR[e&&e.code]||"Something went wrong reaching Claude. Try again.";
+
+function contextText(){
+  const rows=computeRows(), alive=rows.filter(r=>!r.why);
+  const ev=EVK.map(k=>`${EV[k]}: ${S.ev[k]==="f"?"FOUND":S.ev[k]==="x"?"RULED OUT":"not yet known"}`).join("; ");
+  const ghosts=alive.map(({g})=>`- ${g.id} (${g.n}): evidence ${g.ev.map(k=>EV[k]).join(", ")}${g.id==="mimic"?" + fake Ghost Orbs":""}${g.f?`; always shows ${EV[g.f]} when evidence is reduced`:""}; hunts ${g.hunt}; speed ${fmtSpeed(g.spd)}; line-of-sight speed-up: ${g.los}; tells: ${g.t.join("; ")}`).join("\n");
+  const answered=QS.filter(q=>S.ans[q.id]!=null).map(q=>`${q.id} = ${q.a[S.ans[q.id]].l}`).join("; ")||"none";
+  return `GAME: Phasmophobia. Difficulty: ${S.diff?S.diff.n:"unknown"}, ${S.evi} evidence given, ghost speed ${S.speedMod*100}%.
+EVIDENCE: ${ev}.
+HUNT SPEEDS SEEN: ${[...S.speeds].join(",")||"none"}. LOS speed-up: ${S.los||"unknown"}. Highest hunt sanity: ${S.hunt==null?"unknown":S.hunt+"%"}.
+ALREADY ANSWERED: ${answered}.
+GHOSTS STILL POSSIBLE (${alive.length}):
+${ghosts}`;
+}
+const QLIST=()=>QS.map(q=>`${q.id}: ${q.q} Options: ${q.a.map((a,i)=>`${i}=${a.l}`).join(" | ")}`).join("\n");
+
+async function initAI(){
+  try{ sample = window.claude ? await window.claude.use("sample") : null; }catch(_){ sample=null; }
+  let imgOK=false;
+  if(sample){ try{ const lim=await sample.limits(); imgOK=!!lim.images; if(lim.images){ const sel=$("nFrames"); [...sel.options].forEach(o=>{o.disabled=+o.value>lim.images.maxCount;}); if(+sel.value>lim.images.maxCount) sel.value=String([...sel.options].filter(o=>!o.disabled).pop()?.value||lim.images.maxCount); } }catch(_){} }
+  if(!sample){ $("aiOn").hidden=true; $("aiOff").hidden=false;
+    $("aiOff").textContent="Ask Claude only works in the online version of this page, opened from claude.ai while you're signed in. The downloaded file still does everything else."; return; }
+  if(!imgOK){ $("drop").hidden=true; $("thumbs").hidden=true; $("askClip").hidden=true; $("aiStatus").textContent="This view can't send images, but you can still ask questions below."; }
+}
+
+async function seek(v,t){ return new Promise(res=>{ const done=()=>{v.removeEventListener("seeked",done);res();}; v.addEventListener("seeked",done); v.currentTime=t; }); }
+async function videoFrames(file,n,bright){
+  const url=URL.createObjectURL(file); const v=document.createElement("video");
+  v.muted=true; v.playsInline=true; v.preload="auto"; v.src=url;
+  await new Promise((res,rej)=>{ v.onloadeddata=res; v.onerror=()=>rej(new Error("decode")); });
+  let d=v.duration; if(!isFinite(d)){ await seek(v,1e7); d=v.duration; }
+  if(!isFinite(d)||d<=0) throw new Error("duration");
+  const W=Math.min(1280,v.videoWidth||1280), H=Math.round((v.videoHeight||720)*W/(v.videoWidth||1280));
+  const c=document.createElement("canvas"); c.width=W; c.height=H; const ctx=c.getContext("2d");
+  const out=[];
+  for(let i=0;i<n;i++){ const t=d*(i+0.5)/n; await seek(v,t);
+    ctx.filter=bright?"brightness(1.6) contrast(1.1)":"none"; ctx.drawImage(v,0,0,W,H);
+    const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.85)); out.push({blob,t,url:URL.createObjectURL(blob)}); }
+  URL.revokeObjectURL(url); return out;
+}
+async function imageFrame(file,bright){
+  const bmp=await createImageBitmap(file); const W=Math.min(1280,bmp.width), H=Math.round(bmp.height*W/bmp.width);
+  const c=document.createElement("canvas"); c.width=W; c.height=H; const ctx=c.getContext("2d");
+  ctx.filter=bright?"brightness(1.6) contrast(1.1)":"none"; ctx.drawImage(bmp,0,0,W,H);
+  const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.88)); return {blob,t:null,url:URL.createObjectURL(blob)};
+}
+const fmtT=t=>t==null?"":`${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,"0")}`;
+async function takeFiles(list){
+  const files=[...list]; if(!files.length) return;
+  frames.forEach(f=>URL.revokeObjectURL(f.url)); frames=[]; $("thumbs").innerHTML=""; $("aiOut").innerHTML="";
+  $("aiStatus").textContent="Reading frames…"; $("askClip").disabled=true;
+  const n=+$("nFrames").value, bright=$("bright").checked;
+  try{
+    const vid=files.find(f=>f.type.startsWith("video/"));
+    if(vid) frames=await videoFrames(vid,n,bright);
+    else for(const f of files.slice(0,n)) frames.push(await imageFrame(f,bright));
+    $("thumbs").innerHTML=frames.map((f,i)=>`<figure><img src="${f.url}" alt="Frame ${i+1}"><figcaption>${f.t==null?i+1:fmtT(f.t)}</figcaption></figure>`).join("");
+    $("aiStatus").textContent=`${frames.length} frame${frames.length>1?"s":""} ready.`; $("askClip").disabled=false;
+    if($("autoAsk").checked) $("askClip").click();
+  }catch(e){ $("aiStatus").textContent="Couldn't read that file. Game Bar .mp4 clips and PNG/JPG screenshots work best."; }
+}
+$("drop").onclick=()=>$("clipIn").click();
+$("pickBtn").onclick=()=>$("clipIn").click();
+// Newest clip from a linked folder (only where the browser allows folder access in this view)
+let capDir=null;
+const VID=/\.(mp4|webm|mkv|mov)$/i;
+if(typeof window.showDirectoryPicker==="function"){ $("newestBtn").hidden=false; }
+$("newestBtn").onclick=async()=>{
+  try{
+    if(!capDir){ capDir=await window.showDirectoryPicker({id:"phasmo-captures",startIn:"videos",mode:"read"}); }
+    else if(capDir.requestPermission && (await capDir.requestPermission({mode:"read"}))!=="granted"){ capDir=null; return; }
+    let best=null;
+    for await (const h of capDir.values()){ if(h.kind!=="file"||!VID.test(h.name)) continue; const f=await h.getFile(); if(!best||f.lastModified>best.lastModified) best=f; }
+    if(!best){ $("folderNote").hidden=false; $("folderNote").textContent=`No video clips in "${capDir.name}". Pick the Captures folder inside Videos.`; capDir=null; return; }
+    $("folderNote").hidden=false; $("folderNote").textContent=`Using "${best.name}" from ${capDir.name} (saved ${new Date(best.lastModified).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}).`;
+    takeFiles([best]);
+  }catch(e){
+    if(e&&e.name==="AbortError") return;
+    $("newestBtn").hidden=true; capDir=null;
+    $("folderNote").hidden=false; $("folderNote").textContent="This browser view doesn't allow folder access, so use Choose clip instead.";
+  }
+};
+$("drop").onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();$("clipIn").click();} };
+$("clipIn").onchange=e=>{ takeFiles(e.target.files); e.target.value=""; };
+["dragenter","dragover"].forEach(t=>$("drop").addEventListener(t,e=>{e.preventDefault();$("drop").classList.add("over");}));
+["dragleave","drop"].forEach(t=>$("drop").addEventListener(t,e=>{e.preventDefault();$("drop").classList.remove("over");}));
+$("drop").addEventListener("drop",e=>takeFiles(e.dataTransfer.files));
+$("stopAi").onclick=()=>aiCtl&&aiCtl.abort();
+
+$("askClip").onclick=async()=>{
+  if(!sample||!frames.length) return;
+  aiCtl=new AbortController(); $("askClip").disabled=true; $("stopAi").hidden=false; $("aiStatus").textContent="Claude is looking… (can take up to a minute)"; $("aiOut").innerHTML="";
+  const stamps=frames.map((f,i)=>`image ${i+1}${f.t!=null?` at ${fmtT(f.t)}`:""}`).join(", ");
+  const prompt=`You are helping a Phasmophobia player identify the ghost. Attached are ${frames.length} still frames from their gameplay (${stamps}), in order.${$("bright").checked?" They were brightened to help in the dark.":""} You cannot hear audio.
+Player's note: ${$("clipNote").value.trim()||"(none)"}
+
+${contextText()}
+
+DEDUCTION QUESTIONS the page uses (id: question, options by index):
+${QLIST()}
+
+Rules: Only report what is clearly visible in the frames. The game is dark and frames are seconds apart, so if something is unclear, say so instead of guessing. Never rule out the Mimic from behaviour (it copies other ghosts). Only rule out ghosts from the "still possible" list, and only with a certain reason. Evidence you can see (EMF 5 reading, writing in a book, freezing temperature reading, UV prints, D.O.T.S. silhouette, ghost orbs on a camera, Spirit Box response text) counts.
+
+Reply with ONLY this JSON:
+{"seen":"1-3 plain sentences on what the frames show","observations":["short factual points"],"evidence":[{"type":"emf|uv|writing|freezing|dots|orb|box","state":"found|ruled","why":"..."}],"answers":[{"q":"question id","a":0,"why":"..."}],"ruleOut":[{"ghost":"ghost id","why":"..."}],"likely":[{"ghost":"ghost id","why":"..."}],"nextTest":"one practical thing to test next"}
+Use empty arrays when nothing applies.`;
+  try{
+    const r=await sample.json(prompt,{images:frames.map(f=>f.blob),signal:aiCtl.signal});
+    lastAI=r; showAI(r); $("aiStatus").textContent="";
+  }catch(e){ $("aiStatus").textContent=e&&e.code==="cancelled"?"Stopped.":errText(e); }
+  finally{ $("askClip").disabled=false; $("stopAi").hidden=true; }
+};
+const esc=x=>String(x??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const gName=id=>(G.find(g=>g.id===id)||{}).n;
+function showAI(r){
+  const ans=(Array.isArray(r.answers)?r.answers:[]).filter(a=>{const q=QS.find(q=>q.id===a.q); return q&&Number.isInteger(+a.a)&&q.a[+a.a];});
+  const ro=(Array.isArray(r.ruleOut)?r.ruleOut:[]).filter(x=>gName(x.ghost)&&x.ghost!=="mimic");
+  const evs=(Array.isArray(r.evidence)?r.evidence:[]).filter(x=>EV[x.type]&&(x.state==="found"||x.state==="ruled"));
+  const lk=(Array.isArray(r.likely)?r.likely:[]).filter(x=>gName(x.ghost));
+  let h=`<div class="seen">${esc(r.seen)}</div>`;
+  if(Array.isArray(r.observations)&&r.observations.length) h+=`<ul>${r.observations.map(o=>`<li>${esc(o)}</li>`).join("")}</ul>`;
+  if(evs.length||ans.length||ro.length){
+    h+=`<div class="grp">Suggested updates (untick any you disagree with)</div>`;
+    h+=evs.map((x,i)=>`<label><input type="checkbox" data-aev="${i}" checked> Mark ${esc(EV[x.type])} as ${x.state==="found"?"found":"ruled out"}: ${esc(x.why)}</label>`).join("");
+    h+=ans.map((a,i)=>{const q=QS.find(q=>q.id===a.q);return `<label><input type="checkbox" data-aans="${i}" checked> ${esc(q.q)} → <b>${esc(q.a[+a.a].l)}</b>: ${esc(a.why)}</label>`;}).join("");
+    h+=ro.map((x,i)=>`<label><input type="checkbox" data-aro="${i}"> Rule out ${esc(gName(x.ghost))}: ${esc(x.why)}</label>`).join("");
+    h+=`<div class="row"><button class="btn primary" id="applyAI">Apply selected</button></div>`;
+  }
+  if(lk.length) h+=`<div class="hintbar">Looks like: ${lk.map(x=>`<b>${esc(gName(x.ghost))}</b> (${esc(x.why)})`).join("; ")}</div>`;
+  if(r.nextTest) h+=`<div class="note" style="margin:0"><b>Test next:</b> ${esc(r.nextTest)}</div>`;
+  $("aiOut").innerHTML=h;
+  const ap=$("applyAI"); if(ap) ap.onclick=()=>{
+    document.querySelectorAll("[data-aev]").forEach(cb=>{ if(cb.checked){const x=evs[+cb.dataset.aev]; S.ev[x.type]=x.state==="found"?"f":"x";} });
+    document.querySelectorAll("[data-aans]").forEach(cb=>{ if(cb.checked){const a=ans[+cb.dataset.aans]; S.ans[a.q]=+a.a;} });
+    document.querySelectorAll("[data-aro]").forEach(cb=>{ if(cb.checked) S.manual.add(ro[+cb.dataset.aro].ghost); });
+    render(); ap.textContent="Applied"; ap.disabled=true; };
+}
+
+async function askChat(){
+  const qText=$("chatIn").value.trim(); if(!qText||!sample) return;
+  $("chatIn").value=""; $("chatBtn").disabled=true; $("chatOut").textContent="Thinking…";
+  const rules=`You are a Phasmophobia expert helping identify the ghost in the player's current contract. Be brief and practical (under 120 words). Base answers on this live state from their journal page:\n\n${contextText()}${lastAI?`\n\nEarlier clip analysis: ${lastAI.seen||""}`:""}`;
+  chatTurns.push({role:"user",content:qText}); chatTurns=chatTurns.slice(-6); if(chatTurns[0].role!=="user") chatTurns.shift();
+  try{
+    const {text}=await sample([{role:"user",content:rules},...chatTurns],{cache:false,onText:({text})=>{$("chatOut").textContent=text;}});
+    chatTurns.push({role:"assistant",content:text});
+  }catch(e){ chatTurns.pop(); $("chatOut").textContent=e&&e.text?e.text:errText(e); }
+  finally{ $("chatBtn").disabled=false; }
+}
+$("chatBtn").onclick=askChat;
+$("chatIn").onkeydown=e=>{ if(e.key==="Enter") askChat(); };
+initAI();
+
+// ---------- Desktop app: OBS panel ----------
+(function(){
+  const P=window.phasmo; if(!P) return;
+  $("obsBox").hidden=false; $("aiBox").hidden=true;
+  const keyName=a=>String(a||"").replace(/CommandOrControl|CmdOrCtrl/g,"Ctrl");
+  const toAccel=a=>String(a||"").trim().replace(/\bCtrl\b/gi,"CommandOrControl");
+  P.onStatus(st=>{
+    $("obsDot").classList.toggle("on",!!st.connected);
+    $("obsText").textContent=st.connected?"Connected to OBS. Replay buffer is recording.":(st.obsPath?"Not connected to OBS.":"OBS wasn't found on this PC.");
+    $("saveKey").textContent=keyName(st.saveHotkey);
+    if(st.lastClip){ $("obsShow").disabled=false; $("clipInfo").innerHTML=`Latest clip${st.saved?` (saved ${new Date(st.saved).toLocaleTimeString([], {hour:"numeric",minute:"2-digit",second:"2-digit"})})`:""}:<br><span class="clipname"></span>`; $("clipInfo").querySelector(".clipname").textContent=st.lastClip; }
+    else if(st.saving) $("clipInfo").textContent="Saving clip…";
+    $("obsErr").innerHTML=st.error?'<div class="warn" style="margin-top:8px"></div>':"";
+    if(st.error) $("obsErr").firstChild.textContent=st.error;
+  });
+  $("obsStart").onclick=async()=>{ $("obsText").textContent="Starting OBS…"; await P.launchObs(); };
+  $("obsSave").onclick=()=>P.saveClip();
+  $("obsShow").onclick=()=>P.showClip();
+  $("askOnline").onclick=async()=>{ await P.showClip(); await P.openSite(); };
+  async function loadSet(){ const c=await P.getSettings();
+    $("sObs").value=c.obsPath||""; $("sObs").placeholder=c.detectedObs?("found: "+c.detectedObs):"not found, use Browse";
+    $("sPort").value=c.port; $("sPw").value=c.password; $("sSave").value=keyName(c.saveHotkey); $("sToggle").value=keyName(c.toggleHotkey);
+    $("sOp").value=c.opacity; $("sAuto").checked=!!c.autoStartObs; $("sTop").checked=!!c.alwaysOnTop; $("sShow").checked=!!c.showClipAfterSave; }
+  loadSet();
+  $("sBrowse").onclick=async()=>{ const p=await P.browseObs(); if(p) $("sObs").value=p; };
+  $("sOp").oninput=e=>P.setOpacity(e.target.value);
+  $("sApply").onclick=async()=>{ $("sMsg").textContent="Saving…";
+    await P.setSettings({obsPath:$("sObs").value.trim(),port:+$("sPort").value,password:$("sPw").value,saveHotkey:toAccel($("sSave").value),toggleHotkey:toAccel($("sToggle").value),opacity:+$("sOp").value,autoStartObs:$("sAuto").checked,alwaysOnTop:$("sTop").checked,showClipAfterSave:$("sShow").checked});
+    $("sMsg").textContent="Saved."; loadSet(); };
+})();
+
+drawDiff(); render();
+</script>
+
+</body></html>
