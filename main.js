@@ -4,7 +4,7 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, shell, dialog, Menu, screen } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { spawn, execFile } = require("child_process");
+const { spawn, execFile, execFileSync } = require("child_process");
 const OBSWebSocket = require("obs-websocket-js/json").default;
 
 const DEFAULTS = {
@@ -52,9 +52,29 @@ function saveCfg() {
 }
 
 // ---------- status to the window ----------
+// OBS's installer records its folder in the registry; use that before guessing.
+let regObs;
+function obsFromRegistry() {
+  if (regObs !== undefined) return regObs;
+  regObs = null;
+  if (process.platform !== "win32") return regObs;
+  for (const key of ["HKLM\\SOFTWARE\\OBS Studio", "HKLM\\SOFTWARE\\WOW6432Node\\OBS Studio", "HKCU\\SOFTWARE\\OBS Studio"]) {
+    try {
+      const out = execFileSync("reg", ["query", key, "/ve"], { windowsHide: true, encoding: "utf8" });
+      const m = out.match(/REG_SZ\s+(.+)/);
+      if (m) {
+        const exe = path.join(m[1].trim(), "bin", "64bit", "obs64.exe");
+        if (fs.existsSync(exe)) { regObs = exe; break; }
+      }
+    } catch {}
+  }
+  return regObs;
+}
 function findObs() {
   if (cfg.obsPath && fs.existsSync(cfg.obsPath)) return cfg.obsPath;
-  return OBS_GUESSES.find((p) => fs.existsSync(p)) || null;
+  const pf = [process.env.ProgramW6432, process.env.ProgramFiles, process.env["ProgramFiles(x86)"]]
+    .filter(Boolean).map((d) => path.join(d, "obs-studio", "bin", "64bit", "obs64.exe"));
+  return obsFromRegistry() || [...pf, ...OBS_GUESSES].find((p) => fs.existsSync(p)) || null;
 }
 function pushStatus(extra = {}) {
   if (!win || win.isDestroyed()) return;
@@ -79,8 +99,9 @@ async function launchObs() {
   if (!exe) { lastError = "Couldn't find OBS. Install it from obsproject.com, or set its location in Settings."; pushStatus(); return false; }
   try {
     // OBS must be started from its own bin folder or it fails to load its files.
-    const child = spawn(exe, ["--startreplaybuffer", "--minimize-to-tray", "--disable-shutdown-check"],
+    const child = spawn(exe, ["--startreplaybuffer", "--disable-shutdown-check"],
       { cwd: path.dirname(exe), detached: true, stdio: "ignore", windowsHide: false });
+    child.on("error", (e) => { lastError = "Couldn't start OBS from " + exe + ": " + e.message; pushStatus(); });
     child.unref();
     return true;
   } catch (e) {
