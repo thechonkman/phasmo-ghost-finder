@@ -229,6 +229,10 @@ details summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-top:10
       <div class="chips" id="losChips"></div>
       <div class="lbl">Highest average sanity a hunt started at</div>
       <div class="row"><input type="number" id="huntSan" min="0" max="100" placeholder="%" aria-label="Highest average sanity at a hunt"><span class="note" style="margin:0">Leave blank if unsure. Ignore hunts forced by cursed possessions.</span></div>
+      <div class="lbl">Footstep tapper</div>
+      <div class="row"><button class="btn" id="tapBtn">Tap on each footstep <kbd id="tapKey">F</kbd></button><span class="timer" id="bpm">— BPM</span><button class="btn" id="tapReset">Clear</button></div>
+      <p class="note" id="tapVerdict">During a hunt, tap along with the ghost's footsteps from a hiding spot. Four or more taps gives a reading.</p>
+      <div id="tapUse"></div>
       <p class="note" id="speedNote"></p>
     </section>
 
@@ -451,6 +455,7 @@ function reset(){ S.ev={};S.speeds.clear();S.los=null;S.hunt=null;S.ans={};S.man
 $("resetBtn").onclick=reset;
 document.addEventListener("keydown",e=>{ if(["INPUT","SELECT","TEXTAREA"].includes(e.target.tagName)||!$("modal").hidden) return;
   if(e.key>="1"&&e.key<="7"){const k=EVK[+e.key-1]; S.ev[k]=S.ev[k]==null?"f":S.ev[k]==="f"?"x":undefined; if(!S.ev[k]) delete S.ev[k]; render();}
+  else if(e.key==="f"||e.key==="F") tap();
   else if(e.key==="r"||e.key==="R") reset();
   else if((e.key==="c"||e.key==="C")&&!$("aiOn").hidden) { if(!$("newestBtn").hidden) $("newestBtn").click(); else $("clipIn").click(); } else if(e.key==="t"||e.key==="T") $("tmBtn").click(); });
 
@@ -647,6 +652,36 @@ initAI();
     await P.setSettings({obsPath:$("sObs").value.trim(),port:+$("sPort").value,password:$("sPw").value,saveHotkey:toAccel($("sSave").value),toggleHotkey:toAccel($("sToggle").value),opacity:+$("sOp").value,autoStartObs:$("sAuto").checked,alwaysOnTop:$("sTop").checked,showClipAfterSave:$("sShow").checked});
     $("sMsg").textContent="Saved."; loadSet(); };
 })();
+
+// ---------- footstep tapper ----------
+let taps=[];
+const bpmOf=arr=>{ const iv=[]; for(let i=1;i<arr.length;i++) iv.push(arr[i]-arr[i-1]); iv.sort((a,b)=>a-b); const m=iv[Math.floor(iv.length/2)]; return 60000/m; };
+function tap(){
+  const now=performance.now();
+  if(taps.length&&now-taps[taps.length-1]>2000) taps=[];
+  taps.push(now); if(taps.length>40) taps.shift();
+  drawTaps();
+}
+function drawTaps(){
+  if(taps.length<4){ $("bpm").textContent=taps.length?`${taps.length} tap${taps.length>1?"s":""}`:"— BPM"; $("tapUse").innerHTML=""; return; }
+  const bpm=bpmOf(taps.slice(-7)), v=bpm/S.speedMod;
+  $("bpm").textContent=Math.round(bpm)+" BPM";
+  let cat=null, msg;
+  if(v<75){cat="s";msg="Rough read: slower than a normal ghost.";}
+  else if(v>=85&&v<=105){cat="n";msg="Rough read: about normal speed (1.7 m/s).";}
+  else if(v>120){cat="f";msg="Rough read: faster than a normal ghost.";}
+  else msg="Between categories. Keep tapping, or don't mark speed from this.";
+  if(taps.length>=10){ const a=bpmOf(taps.slice(0,5)), b=bpmOf(taps.slice(-5));
+    if(b>a*1.15) msg+=` It sped up while you tapped (${Math.round(a)} → ${Math.round(b)} BPM), like a line-of-sight speed-up or an ability.`;
+    else if(b<a*0.85) msg+=` It slowed down while you tapped (${Math.round(a)} → ${Math.round(b)} BPM).`; }
+  $("tapVerdict").textContent=msg+" BPM ranges are approximate; floor type and footstep sounds vary.";
+  const lab={s:"slow",n:"normal",f:"fast"};
+  $("tapUse").innerHTML=cat&&!S.speeds.has(cat)?`<button class="btn" id="tapMark">Mark speed as ${lab[cat]}</button>`:"";
+  const mk=$("tapMark"); if(mk) mk.onclick=()=>{S.speeds.add(cat); render(); drawTaps();};
+}
+$("tapBtn").onclick=tap;
+$("tapReset").onclick=()=>{taps=[];drawTaps();$("tapVerdict").textContent="During a hunt, tap along with the ghost's footsteps from a hiding spot. Four or more taps gives a reading.";};
+if(window.phasmo&&window.phasmo.onTap){ window.phasmo.onTap(tap); $("tapKey").textContent="F8"; $("tapBtn").title="F8 works even while the game is focused"; }
 
 drawDiff(); render();
 </script>

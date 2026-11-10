@@ -10,5 +10,6 @@ contextBridge.exposeInMainWorld("phasmo", {
   setSettings: (patch) => ipcRenderer.invoke("cfg:set", patch),
   browseObs: () => ipcRenderer.invoke("cfg:browseObs"),
   setOpacity: (v) => ipcRenderer.invoke("win:opacity", v),
+  onTap: (fn) => ipcRenderer.on("tap", () => fn()),
   onStatus: (fn) => ipcRenderer.on("obs:status", (_e, d) => fn(d))
 });

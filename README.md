@@ -6,6 +6,7 @@ A small always-on-top Windows window for Phasmophobia. It:
 - Starts OBS with its Replay Buffer running, so the last stretch of gameplay is always being recorded.
 - Saves a clip from anywhere, even mid-game, with one hotkey (**Ctrl+Shift+S** by default).
 - Shows or hides itself with **Ctrl+Shift+H**.
+- Reads ghost speed from footsteps: press **F8** on each footstep during a hunt, even while the game is focused.
 
 It runs offline and costs nothing to use. To have Claude look at a clip, click **Ask Claude about this clip**. That opens the online finder on claude.ai and shows the clip in its folder, ready to send.
 

@@ -158,6 +158,7 @@ function registerHotkeys() {
       if (win.isVisible()) win.hide(); else { win.showInactive(); win.setAlwaysOnTop(cfg.alwaysOnTop, "screen-saver"); }
     })) bad.push(cfg.toggleHotkey);
   } catch { bad.push(cfg.toggleHotkey); }
+  try { if (!globalShortcut.register("F8", () => { if (win && !win.isDestroyed()) win.webContents.send("tap"); })) bad.push("F8"); } catch { bad.push("F8"); }
   if (bad.length) lastError = "These hotkeys are taken by another app: " + bad.join(", ") + ". Pick different ones in Settings.";
 }
 
