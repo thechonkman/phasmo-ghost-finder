@@ -14,9 +14,11 @@ Full setup steps are in the Phasmo Ghost Finder Setup Guide.
 
 ## Download
 
-Open the **Actions** tab, click the newest green **Build Windows app** run, and download **PhasmoGhostFinder-windows** at the bottom. Unzip it and run `Phasmo Ghost Finder Setup 1.0.0.exe`.
+Download [the latest installer](https://github.com/thechonkman/phasmo-ghost-finder/releases/latest/download/PhasmoGhostFinder-Setup.exe) and run it. This link always gets the newest version.
 
 Windows SmartScreen may warn that the app is unrecognised, because it isn't code-signed. Click **More info → Run anyway**.
+
+After that the app updates itself: it checks every 30 minutes, downloads new versions in the background and installs them when you quit. The Settings panel shows the version and a **Restart to update** button when one is ready.
 
 ## Keys
 
