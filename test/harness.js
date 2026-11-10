@@ -1,6 +1,6 @@
 // End-to-end check: runs the real app (main.js, overlay and HUD) against a fake OBS and clicks through it.
 // Linux: xvfb-run -a -s "-screen 0 1920x1080x24" ./node_modules/electron/dist/electron test/harness.js --no-sandbox --disable-gpu
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, clipboard } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -15,7 +15,8 @@ fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ autoStartObs:
 const results = [];
 const consoleErrors = [];
 const check = (name, ok, info = "") => results.push({ name, ok: !!ok, info });
-const obs = startFakeObs({ port: PORT, password: PASSWORD });
+const clipDir = fs.mkdtempSync(path.join(os.tmpdir(), "pgf-clips-"));
+const obs = startFakeObs({ port: PORT, password: PASSWORD, clipDir });
 let started = false;
 
 app.on("browser-window-created", (_e, win) => {
@@ -83,6 +84,24 @@ app.on("browser-window-created", (_e, win) => {
       await js(`$("obsSave").click()`); await wait(900);
       check("save clip shows the clip path", /Replay 1\.mp4/.test(await txt("#clipInfo")), await txt("#clipInfo"));
       check("Show clip button enabled after a save", await js(`!$("obsShow").disabled`));
+      await js(`$("obsSave").click()`); await wait(900);
+      check("saved clips list shows both clips", (await js(`$("clipList").querySelectorAll("[data-ctrash]").length`)) === 2);
+      check("Recycle all asks for a second click first", await js(`(()=>{$("trashAll").click();return /Click again/.test($("trashAll").textContent)})()`));
+      await js(`document.querySelector("[data-ctrash]").click()`); await wait(1200);
+      const left = await js(`$("clipList").querySelectorAll("[data-ctrash]").length`), cmsg = await txt("#clipMsg");
+      check("Recycle moves a clip to the Recycle Bin, or says clearly why it couldn't", (left === 1 && /Recycle Bin/.test(cmsg)) || /Couldn't move it to the Recycle Bin/.test(cmsg), `left=${left} msg=${cmsg}`);
+      check("only this app's clips can be recycled", (await js(`window.phasmo.trashClip("/etc/hostname").then(r=>r.ok)`)) === false);
+      // Footsteps: a Revenant-style hunt (crawl at 1.0 m/s, then 3.0 m/s) should point to the Revenant
+      await js(`(()=>{const t=[0];for(let i=0;i<6;i++)t.push(t[t.length-1]+60000/55);for(let i=0;i<10;i++)t.push(t[t.length-1]+60000/165);hunts=[{t0:0,taps:t}];drawTaps();})()`);
+      check("hunt log shows the slow-then-fast change", /slow .*→ .*very fast/.test(await txt("#huntLog")), await txt("#huntLog"));
+      check("best guess names the Revenant", /Best guess:\s*Revenant/.test(await txt("#guess")), await txt("#guess"));
+      // Notes: copy from the app, then load them back
+      await js(`$("copyNotes").click()`); await wait(300);
+      const notes = clipboard.readText();
+      check("Copy notes puts readable notes plus saved state on the clipboard", /Phasmo Ghost Finder notes/.test(notes) && /Footsteps:\nHunt 1:/.test(notes) && /PGF-STATE:/.test(notes), notes.slice(0, 160));
+      const restored = await js(`(()=>{const before=JSON.stringify(getState());S.ev={};S.ans={};hunts=[];render();const ok=takeNotes(${JSON.stringify(notes)});return ok&&JSON.stringify(getState())===before})()`);
+      check("pasting the notes restores evidence, answers and footsteps exactly", restored);
+      check("version shows in Settings", /^Version \d+\.\d+\.\d+/.test(await txt("#updText")), await txt("#updText"));
       await js(`window.phasmo.setSettings({password:"wrong"})`); await wait(1200);
       check("wrong password shows a clear message", /password/i.test(await txt("#obsErr")), await txt("#obsErr"));
       await js(`window.phasmo.setSettings({password:${JSON.stringify(PASSWORD)}})`); await wait(1200);
@@ -97,6 +116,7 @@ app.on("browser-window-created", (_e, win) => {
       const hudText = hud ? await hud.webContents.executeJavaScript(`document.body.innerText`) : "";
       check("info box shows difficulty, evidence and ghosts", /Nightmare/.test(hudText) && /Ghost Orb/.test(hudText) && /Raiju/.test(hudText), hudText.replace(/\n/g, " | "));
       check("info box shows OBS recording", /Recording/.test(hudText));
+      check("info box shows the best guess", /Best guess: Revenant/.test(hudText), hudText.replace(/\n/g, " | "));
       if (hud) { const img = await hud.webContents.capturePage(); fs.writeFileSync(path.join(OUT, "hud.png"), img.toPNG()); }
       // Reopen (second launch of the app does the same as the hotkey)
       app.emit("second-instance"); await wait(600);

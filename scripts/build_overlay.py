@@ -87,6 +87,7 @@ page = f"""<!doctype html>
       <section class="box" id="ghostBox">
         <h2 id="boardTitle">Possible ghosts</h2>
         <p class="sub">Click a ghost's name for its speed, hunt sanity and tells. Underlined evidence is always shown when evidence is reduced.</p>
+        <div id="guess"></div>
         <div class="board" id="board"></div>
       </section>
     </div>

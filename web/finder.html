@@ -174,7 +174,7 @@ textarea{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid 
         </div>
         <div class="thumbs" id="thumbs"></div>
         <div class="lbl">What happened? (optional)</div>
-        <textarea id="clipNote" placeholder="e.g. hunt started at 60% sanity, it walked past my closet"></textarea>
+        <textarea id="clipNote" placeholder="Paste notes from the app here (Ctrl+V), or type what happened"></textarea>
         <div class="row" style="margin-top:8px"><button class="btn primary" id="askClip" disabled>Ask Claude</button><button class="btn" id="stopAi" hidden>Stop</button><span class="status" id="aiStatus"></span></div>
         <div class="ai" id="aiOut"></div>
         <div class="lbl" style="margin-top:14px">Ask anything about this contract</div>
@@ -191,9 +191,11 @@ textarea{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid 
       <div class="lbl">Highest average sanity a hunt started at</div>
       <div class="row"><input type="number" id="huntSan" min="0" max="100" placeholder="%" aria-label="Highest average sanity at a hunt"><span class="note" style="margin:0">Leave blank if unsure. Ignore hunts forced by cursed possessions. A 3% margin is allowed for misreads.</span></div>
       <div class="lbl">Footstep tapper</div>
-      <div class="row"><button class="btn" id="tapBtn">Tap on each footstep <kbd id="tapKey">F</kbd></button><span class="timer" id="bpm">— BPM</span><button class="btn" id="tapReset">Clear</button></div>
-      <p class="note" id="tapVerdict">During a hunt, tap along with the ghost's footsteps from a hiding spot. Four or more taps gives a reading.</p>
-      <div id="tapUse"></div>
+      <div class="row"><button class="btn" id="tapBtn">Tap on each footstep <kbd id="tapKey">F</kbd></button><span class="timer" id="bpm">— BPM</span></div>
+      <div class="row" style="margin-top:6px"><button class="btn" id="newHuntBtn">New hunt</button><button class="btn" id="tapReset">Clear all hunts</button></div>
+      <p class="note" id="tapVerdict">During a hunt, tap along with the ghost's footsteps from a hiding spot. Keep tapping as it speeds up or slows down; four or more taps gives a reading.</p>
+      <ul class="tells" id="huntLog" style="margin-top:6px"></ul>
+      <div id="tapUse" class="row" style="margin-top:6px"></div>
       <p class="note" id="speedNote"></p>
     </section>
 
@@ -214,6 +216,7 @@ textarea{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid 
 
   <div class="col">
     <div class="boardhead"><h2 id="boardTitle">Possible ghosts</h2><span class="note" style="margin:0">Underlined evidence is always shown when evidence is reduced (Nightmare, Insanity, custom 1–2). Click a card's button to rule it out by hand.</span></div>
+    <div id="guess"></div>
     <div class="board" id="board"></div>
   </div>
 </main>
@@ -388,6 +391,7 @@ function render(){
   $("qs").innerHTML=QS.map(q=>`<div class="q"><p>${q.q}</p><div class="ans">${q.a.map((a,i)=>`<button data-q="${q.id}" data-a="${i}" class="${S.ans[q.id]===i?"on":""}">${a.l}</button>`).join("")}</div></div>`).join("");
   $("qSub").textContent=N<=1?"With little or no evidence these do most of the work. Each answer only rules ghosts out when the behaviour is certain; skip anything you're unsure of.":"Answer what you've seen. Each answer only rules ghosts out when the behaviour is certain. Skip anything you're unsure of.";
   document.body.classList.toggle("compact",S.compact);
+  if(typeof drawGuess==="function"&&typeof hunts!=="undefined") drawGuess();
   // move questions up on low evidence
   const evBox=$("evgrid").closest("section"); if(N<=1){ if(evBox.nextElementSibling!==$("qBox")) evBox.after($("qBox")); } else if($("smBox").previousElementSibling!==$("qBox")) $("smBox").before($("qBox"));
 }
@@ -412,7 +416,7 @@ document.addEventListener("click",e=>{
 });
 $("huntSan").oninput=e=>{const v=e.target.value.trim(); S.hunt=v===""?null:Math.max(0,Math.min(100,+v)); render();};
 $("compactBtn").onclick=e=>{S.compact=!S.compact; e.currentTarget.setAttribute("aria-pressed",S.compact); render();};
-function reset(){ S.ev={};S.speeds.clear();S.los=null;S.hunt=null;S.ans={};S.manual.clear();$("huntSan").value="";lastAI=null;chatTurns=[];$("aiOut").innerHTML="";$("chatOut").textContent="";tmStop();tmT=0;tmDraw(); $("mtitle").textContent="What difficulty are you running?"; $("modal").hidden=false; drawDiff(); render(); }
+function reset(){ hunts=[]; drawTaps(); $("tapVerdict").textContent=TAP_HELP; S.ev={};S.speeds.clear();S.los=null;S.hunt=null;S.ans={};S.manual.clear();$("huntSan").value="";lastAI=null;chatTurns=[];$("aiOut").innerHTML="";$("chatOut").textContent="";tmStop();tmT=0;tmDraw(); $("mtitle").textContent="What difficulty are you running?"; $("modal").hidden=false; drawDiff(); render(); }
 $("resetBtn").onclick=reset;
 document.addEventListener("keydown",e=>{ if(["INPUT","SELECT","TEXTAREA"].includes(e.target.tagName)||!$("modal").hidden) return;
   if(e.key>="1"&&e.key<="7"){const k=EVK[+e.key-1]; S.ev[k]=S.ev[k]==null?"f":S.ev[k]==="f"?"x":undefined; if(!S.ev[k]) delete S.ev[k]; render();}
@@ -441,6 +445,9 @@ function contextText(){
 EVIDENCE: ${ev}.
 HUNT SPEEDS SEEN: ${[...S.speeds].join(",")||"none"}. LOS speed-up: ${S.los||"unknown"}. Highest hunt sanity: ${S.hunt==null?"unknown":S.hunt+"%"}.
 ALREADY ANSWERED: ${answered}.
+FOOTSTEP TIMING the player tapped (speeds approximate, from about ${BPM_PER_MS} footsteps a minute per 1 m/s):
+${tapSummary()}
+SPEED-BASED BEST GUESS (estimate): ${bestGuess().list.map(x=>`${x.g.n} (${x.why.join(", ")})`).join("; ")||"none yet"}
 GHOSTS STILL POSSIBLE (${alive.length}):
 ${ghosts}`;
 }
@@ -531,7 +538,7 @@ ${contextText()}
 DEDUCTION QUESTIONS the page uses (id: question, options by index):
 ${QLIST()}
 
-Rules: Only report what is clearly visible in the frames. The game is dark and frames are seconds apart, so if something is unclear, say so instead of guessing. Never rule out the Mimic from behaviour (it copies other ghosts). Only rule out ghosts from the "still possible" list, and only with a certain reason. Evidence you can see (EMF 5 reading, writing in a book, freezing temperature reading, UV prints, D.O.T.S. silhouette, ghost orbs on a camera, Spirit Box response text) counts.
+Rules: Cross-check what you see against the footstep timing, answers and evidence above, and say plainly if they agree or conflict. Only report what is clearly visible in the frames. The game is dark and frames are seconds apart, so if something is unclear, say so instead of guessing. Never rule out the Mimic from behaviour (it copies other ghosts). Only rule out ghosts from the "still possible" list, and only with a certain reason. Evidence you can see (EMF 5 reading, writing in a book, freezing temperature reading, UV prints, D.O.T.S. silhouette, ghost orbs on a camera, Spirit Box response text) counts.
 
 Reply with ONLY this JSON:
 {"seen":"1-3 plain sentences on what the frames show","observations":["short factual points"],"evidence":[{"type":"emf|uv|writing|freezing|dots|orb|box","state":"found|ruled","why":"..."}],"answers":[{"q":"question id","a":0,"why":"..."}],"ruleOut":[{"ghost":"ghost id","why":"..."}],"likely":[{"ghost":"ghost id","why":"..."}],"nextTest":"one practical thing to test next"}
@@ -584,34 +591,148 @@ $("chatIn").onkeydown=e=>{ if(e.key==="Enter") askChat(); };
 initAI();
 
 // ---------- footstep tapper ----------
-let taps=[];
-const bpmOf=arr=>{ const iv=[]; for(let i=1;i<arr.length;i++) iv.push(arr[i]-arr[i-1]); iv.sort((a,b)=>a-b); const m=iv[Math.floor(iv.length/2)]; return 60000/m; };
+// Taps are grouped into hunts (a gap over 15 s starts a new one). Within a hunt the
+// rhythm is split into stretches wherever it changes and stays changed, so speed changes
+// during a hunt (a Revenant spotting you, a Deogen closing in) show up as separate stretches.
+const BPM_PER_MS=55;            // rough: about 55 footsteps a minute per 1 m/s of ghost speed
+const NEW_HUNT_GAP=15000, PAUSE_GAP=3500;   // a Deogen right next to you steps only every ~2.7 s
+let hunts=[];                   // [{t0, taps:[ms since t0]}]
 function tap(){
-  const now=performance.now();
-  if(taps.length&&now-taps[taps.length-1]>2000) taps=[];
-  taps.push(now); if(taps.length>40) taps.shift();
+  const now=performance.now(), h=hunts[hunts.length-1];
+  if(!h||now-(h.t0+h.taps[h.taps.length-1])>NEW_HUNT_GAP) hunts.push({t0:now,taps:[0]});
+  else h.taps.push(now-h.t0);
   drawTaps();
 }
-function drawTaps(){
-  if(taps.length<4){ $("bpm").textContent=taps.length?`${taps.length} tap${taps.length>1?"s":""}`:"— BPM"; $("tapUse").innerHTML=""; return; }
-  const bpm=bpmOf(taps.slice(-7)), v=bpm/S.speedMod;
-  $("bpm").textContent=Math.round(bpm)+" BPM";
-  let cat=null, msg;
-  if(v<75){cat="s";msg="Rough read: slower than a normal ghost.";}
-  else if(v>=85&&v<=105){cat="n";msg="Rough read: about normal speed (1.7 m/s).";}
-  else if(v>120){cat="f";msg="Rough read: faster than a normal ghost.";}
-  else msg="Between categories. Keep tapping, or don't mark speed from this.";
-  if(taps.length>=10){ const a=bpmOf(taps.slice(0,5)), b=bpmOf(taps.slice(-5));
-    if(b>a*1.15) msg+=` It sped up while you tapped (${Math.round(a)} → ${Math.round(b)} BPM), like a line-of-sight speed-up or an ability.`;
-    else if(b<a*0.85) msg+=` It slowed down while you tapped (${Math.round(a)} → ${Math.round(b)} BPM).`; }
-  $("tapVerdict").textContent=msg+" BPM ranges are approximate; floor type and footstep sounds vary.";
-  const lab={s:"slow",n:"normal",f:"fast"};
-  $("tapUse").innerHTML=cat&&!S.speeds.has(cat)?`<button class="btn" id="tapMark">Mark speed as ${lab[cat]}</button>`:"";
-  const mk=$("tapMark"); if(mk) mk.onclick=()=>{S.speeds.add(cat); render(); drawTaps();};
+function newHunt(){ const h=hunts[hunts.length-1]; if(h&&h.taps.length) hunts.push({t0:performance.now()+1e9,taps:[]}); hunts=hunts.filter(x=>x.taps.length); drawTaps(); }
+const median=a=>{const b=[...a].sort((x,y)=>x-y);return b.length?b[Math.floor(b.length/2)]:0;};
+const msOf=bpm=>bpm/BPM_PER_MS/S.speedMod;   // ghost's base speed (before the speed setting)
+function analyzeHunt(times){
+  const iv=[]; for(let i=1;i<times.length;i++){ const d=times[i]-times[i-1]; if(d>120&&d<=PAUSE_GAP) iv.push(d); }
+  if(iv.length<3) return null;
+  const bpms=iv.map(d=>60000/d), segs=[]; let cur=bpms.slice(0,3), pend=[];
+  for(let i=3;i<bpms.length;i++){
+    const m=median(cur), v=bpms[i], up=v>m*1.25, down=v<m*0.75;
+    if(up||down){ if(pend.length&&((pend[0]>m)!==up)) pend=[]; pend.push(v); if(pend.length>=3){ segs.push(cur); cur=pend; pend=[]; } }
+    else { cur.push(...pend,v); pend=[]; }
+  }
+  cur.push(...pend); segs.push(cur);
+  const out=segs.map(v=>{const b=median(v);return {bpm:b,ms:msOf(b),n:v.length,first:median(v.slice(0,3)),last:median(v.slice(-3))};});
+  out.forEach(sg=>{ sg.gradual=sg.n>=8&&sg.last>sg.first*1.15; });
+  const changes=[]; for(let i=1;i<out.length;i++){ const r=out[i].bpm/out[i-1].bpm; changes.push(r>=1.6?"jump":r<=0.6?"drop":r>1?"up":"down"); }
+  return {segs:out,changes,start:out[0].ms,taps:times.length};
 }
+const speedWord=ms=>ms<=0.8?"very slow":ms<1.45?"slow":ms<=1.95?"about normal":ms<2.6?"fast":"very fast";
+function huntText(a){
+  return a.segs.map(sg=>`${speedWord(sg.ms)} ~${sg.ms.toFixed(1)} m/s (${Math.round(sg.bpm)} BPM)${sg.gradual?", speeding up":""}`).join(" → ")
+    +(a.changes.includes("jump")?" — sudden big speed-up":"")+(a.changes.includes("drop")?" — sudden big slow-down":"");
+}
+// How well each ghost's known speeds explain what was tapped. A hint, never a rule-out.
+function speedScores(){
+  const A=hunts.map(h=>analyzeHunt(h.taps)).filter(Boolean), sc={}, why={};
+  const add=(id,n,r)=>{ sc[id]=(sc[id]||0)+n; (why[id]=why[id]||[]).includes(r)||why[id].push(r); };
+  const STD=G.filter(g=>g.s==="n").map(g=>g.id);
+  for(const a of A){
+    const st=a.start;
+    if(st<1.45){ for(const id of ["revenant","hantu","thaye","dayan","deildegast","gallu","obambo","aswang","twins","moroi"]) add(id,1,"slow start");
+      if(st<=0.8) add("deogen",1,"very slow"); }
+    else if(st>1.95){ for(const id of ["dayan","kormos","moroi","gallu","obambo","twins","jinn","raiju","hantu","thaye","deildegast"]) add(id,1,"fast from the start");
+      if(st>=2.6){ for(const id of ["revenant","deogen","deildegast","hantu","thaye","raiju","jinn"]) add(id,1,"very fast"); } }
+    else { for(const id of STD) add(id,0.3,"normal speed"); }
+    a.segs.forEach((sg,i)=>{ if(i===0) return; const prev=a.segs[i-1], c=a.changes[i-1];
+      if(c==="jump"&&prev.ms<=1.3&&sg.ms>=2.5) add("revenant",3,"crawled, then sudden very fast");
+      if(c==="jump"&&prev.ms<=1.4&&sg.ms>=1.9&&sg.ms<2.6) add("dayan",1.5,"slow, then fast (you moved?)");
+      if(c==="drop"&&sg.ms<=0.8) add("deogen",3,"very fast, then nearly stopped");
+      if(c==="drop"&&sg.ms>0.8&&sg.ms<=1.4&&prev.ms>=1.9) { add("dayan",1.5,"fast, then slow (you stood still?)"); add("revenant",1,"fast, then slow (lost you?)"); }
+      if(c==="up"||c==="jump"){ if(sg.ms>=2.0&&sg.ms<=2.4&&prev.ms>=1.5&&prev.ms<=1.9) add("kormos",1.5,"sped up to ~2.2 (heard you?)");
+        if(sg.ms>=2.3&&sg.ms<=2.7&&prev.ms>=1.5&&prev.ms<=1.9){ add("raiju",1.5,"sudden ~2.5 (electronics?)"); add("jinn",1.5,"sudden ~2.5 (fuse box on?)"); } }
+    });
+    if(a.segs.some(sg=>sg.gradual)){ for(const g of G) if(g.los!=="no") add(g.id,0.3,"gradual speed-up"); if(st<1.6) add("aswang",1,"slowish start, then fast speed-up"); }
+  }
+  if(A.length>=2){ const starts=A.map(a=>a.start), lo=Math.min(...starts), hi=Math.max(...starts);
+    if(hi>lo*1.2){ for(const id of ["twins","obambo","gallu"]) add(id,1.5,"different speeds in different hunts"); }
+    if(starts.every((v,i)=>i===0||v<starts[i-1]*0.92)){ add("thaye",1.5,"slower every hunt"); add("deildegast",1,"slower every hunt (items touched?)"); } }
+  delete sc.mimic;
+  return {sc,why,A};
+}
+function bestGuess(){
+  const alive=computeRows().filter(r=>!r.why), {sc,why}=speedScores();
+  if(alive.length===1) return {list:[{g:alive[0].g,score:99,why:["the only ghost left"]}],total:1};
+  const list=alive.map(r=>{ const w=[...(why[r.g.id]||[])], h=r.h.length; if(h) w.push(`${h} tell${h>1?"s":""} you reported`);
+    return {g:r.g,score:(sc[r.g.id]||0)+2*h,why:w}; }).filter(x=>x.score>=1.5).sort((a,b)=>b.score-a.score);
+  return {list:list.slice(0,3),total:alive.length};
+}
+function drawGuess(){
+  const el=$("guess"); if(!el) return;
+  const {list,total}=bestGuess();
+  if(!list.length){ el.innerHTML=total?`<p class="note" style="margin:0 0 8px">Best guess appears once footsteps or tells point somewhere. ${total} still possible.</p>`:""; return; }
+  el.innerHTML=`<div class="hintbar" style="margin-bottom:8px"><b>Best guess:</b> ${list.map((x,i)=>`${i?"":"<b>"}${x.g.n}${i?"":"</b>"} <span style="opacity:.8">(${x.why.join(", ")})</span>`).join("; ")}<br><span style="opacity:.75;font-size:11.5px">An estimate, not proof. Confirm with evidence or a test before you pick.</span></div>`;
+}
+function drawTaps(){
+  const h=hunts[hunts.length-1], all=hunts.map(x=>analyzeHunt(x.taps));
+  const cur=h?analyzeHunt(h.taps):null;
+  if(!cur){ $("bpm").textContent=h&&h.taps.length?`${h.taps.length} tap${h.taps.length>1?"s":""}`:"— BPM"; $("tapUse").innerHTML=""; }
+  else{
+    const last=cur.segs[cur.segs.length-1];
+    $("bpm").textContent=Math.round(last.bpm)+" BPM";
+    $("tapVerdict").textContent=`Hunt ${hunts.length}: ${huntText(cur)}. Speeds in m/s are rough; floor type and footstep sounds vary.`;
+    const first=cur.segs[0], cat=first.ms<1.4?"s":first.ms>=1.55&&first.ms<=1.85?"n":first.ms>2.0?"f":null;
+    const lab={s:"clearly slow",n:"about normal",f:"clearly fast"}, btns=[];
+    if(cat&&!S.speeds.has(cat)) btns.push(`<button class="btn" data-tapmark="${cat}">Mark start speed as ${lab[cat]}</button>`);
+    if(cur.segs.some(sg=>sg.gradual)&&S.los!=="yes") btns.push(`<button class="btn" data-taplos="yes">Mark line-of-sight speed-up: yes</button>`);
+    $("tapUse").innerHTML=btns.join(" ");
+  }
+  $("huntLog").innerHTML=all.map((a,i)=>a?`<li><b>Hunt ${i+1}</b> (${hunts[i].taps.length} taps): ${huntText(a)}</li>`:`<li><b>Hunt ${i+1}</b>: ${hunts[i].taps.length} tap${hunts[i].taps.length>1?"s":""}, need at least 4</li>`).join("");
+  drawGuess();
+}
+document.addEventListener("click",e=>{
+  const m=e.target.closest("[data-tapmark]"); if(m){ S.speeds.add(m.dataset.tapmark); render(); drawTaps(); return; }
+  const l=e.target.closest("[data-taplos]"); if(l){ S.los="yes"; render(); drawTaps(); }
+});
+function tapSummary(){ const A=hunts.map(h=>analyzeHunt(h.taps)); return A.map((a,i)=>a?`Hunt ${i+1}: ${huntText(a)}`:null).filter(Boolean).join("\n")||"none tapped"; }
 $("tapBtn").onclick=tap;
-$("tapReset").onclick=()=>{taps=[];drawTaps();$("tapVerdict").textContent="During a hunt, tap along with the ghost's footsteps from a hiding spot. Four or more taps gives a reading.";};
+$("newHuntBtn").onclick=newHunt;
+$("tapReset").onclick=()=>{hunts=[];drawTaps();$("tapVerdict").textContent=TAP_HELP;};
+const TAP_HELP="During a hunt, tap along with the ghost's footsteps from a hiding spot. Keep tapping as it speeds up or slows down; four or more taps gives a reading.";
 if(window.phasmo&&window.phasmo.onTap){ window.phasmo.onTap(tap); $("tapKey").textContent="F8"; $("tapBtn").title="F8 works even while the game is focused"; }
+
+// ---------- notes that carry the whole investigation (app → online finder) ----------
+function getState(){ return {v:1,diff:S.diff?S.diff.id:null,evi:S.evi,mod:S.speedMod,ev:S.ev,speeds:[...S.speeds],los:S.los,hunt:S.hunt,ans:S.ans,manual:[...S.manual],hunts:hunts.map(h=>h.taps.map(t=>Math.round(t)))}; }
+function exportNotes(){
+  const alive=computeRows().filter(r=>!r.why).map(r=>r.g.n), {list}=bestGuess();
+  const lines=["Phasmo Ghost Finder notes",
+    `Difficulty: ${S.diff?S.diff.n:"not set"} (${S.evi} evidence${S.speedMod!==1?`, ghost speed ${S.speedMod*100}%`:""})`,
+    `Evidence found: ${EVK.filter(k=>S.ev[k]==="f").map(k=>EV[k]).join(", ")||"none"}`,
+    `Ruled out: ${EVK.filter(k=>S.ev[k]==="x").map(k=>EV[k]).join(", ")||"none"}`,
+    `Answers: ${QS.filter(q=>S.ans[q.id]!=null).map(q=>`${q.q} ${q.a[S.ans[q.id]].l}`).join(" | ")||"none"}`,
+    `Footsteps:\n${tapSummary()}`,
+    `Still possible (${alive.length}): ${alive.join(", ")}`,
+    `Best guess: ${list.map(x=>`${x.g.n} (${x.why.join(", ")})`).join("; ")||"none yet"}`];
+  return lines.join("\n")+"\nPGF-STATE:"+btoa(unescape(encodeURIComponent(JSON.stringify(getState()))));
+}
+function applyState(st){
+  const d=DIFFS.find(x=>x.id===st.diff); if(d){ S.diff=d; pick=d.id; }
+  S.evi=[0,1,2,3].includes(st.evi)?st.evi:S.evi; S.speedMod=[0.5,0.75,1,1.25,1.5].includes(st.mod)?st.mod:1;
+  S.ev={}; for(const k of EVK) if(st.ev&&(st.ev[k]==="f"||st.ev[k]==="x")) S.ev[k]=st.ev[k];
+  S.speeds=new Set((st.speeds||[]).filter(x=>["s","n","f"].includes(x))); S.los=["yes","no"].includes(st.los)?st.los:null;
+  S.hunt=Number.isFinite(st.hunt)?st.hunt:null; $("huntSan").value=S.hunt==null?"":S.hunt;
+  S.ans={}; for(const q of QS){ const a=st.ans&&st.ans[q.id]; if(Number.isInteger(a)&&q.a[a]) S.ans[q.id]=a; }
+  S.manual=new Set((st.manual||[]).filter(id=>G.some(g=>g.id===id)));
+  hunts=(st.hunts||[]).filter(Array.isArray).map(t=>({t0:-1e12,taps:t.filter(Number.isFinite)})).filter(h=>h.taps.length);
+  if(S.diff){ $("diffName").textContent=S.diff.n; $("diffEvi").textContent=`${S.evi} ev${S.speedMod!==1?" · "+S.speedMod*100+"% speed":""}`; $("modal").hidden=true; }
+  render(); drawTaps(); if(!hunts.length) $("tapVerdict").textContent=TAP_HELP;
+}
+function takeNotes(text){
+  const m=String(text||"").match(/PGF-STATE:([A-Za-z0-9+/=]+)/); if(!m) return false;
+  try{ applyState(JSON.parse(decodeURIComponent(escape(atob(m[1]))))); return true; }catch(_){ return false; }
+}
+document.addEventListener("paste",e=>{
+  const text=e.clipboardData&&e.clipboardData.getData("text"); if(!text||!/PGF-STATE:/.test(text)) return;
+  if(!takeNotes(text)) return;
+  e.preventDefault();
+  const readable=text.replace(/\n?PGF-STATE:\S+/,"").trim(), note=$("clipNote");
+  if(note) note.value=readable;
+  const st=$("aiStatus"); if(st) st.textContent=`Loaded your notes from the app: difficulty, evidence, answers and ${hunts.length} hunt${hunts.length===1?"":"s"} of footsteps.`;
+});
 
 drawDiff(); render();
 </script>

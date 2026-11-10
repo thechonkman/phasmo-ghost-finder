@@ -22,6 +22,7 @@ html,body{margin:0;background:transparent;overflow:hidden;font-family:"IBM Plex 
   <div id="diff" class="m">Pick a difficulty in the overlay</div>
   <div id="ev"></div>
   <div><b class="n" id="remain">30</b> possible: <span class="names" id="names"></span></div>
+  <div id="guessLine" hidden>Best guess: <b id="guess"></b></div>
   <div id="extra" class="m n"></div>
   <div class="m">Press <b id="key">Insert</b> to open the overlay</div>
 </div>
@@ -38,6 +39,7 @@ if (window.phasmo) {
     $("names").textContent = d.remain === 0 ? "none match, recheck your marks" : shown.join(", ") + (d.names.length > shown.length ? ` +${d.names.length - shown.length} more` : "");
     $("extra").textContent = [d.timer ? "Smudge " + d.timer : "", d.bpm ? "Footsteps " + d.bpm : ""].filter(Boolean).join("  ·  ");
     $("key").textContent = d.key || "Insert";
+    $("guessLine").hidden = !d.guess || d.remain <= 1; $("guess").textContent = d.guess || "";
   });
   window.phasmo.onStatus((st) => {
     $("obs").classList.toggle("on", !!st.connected);

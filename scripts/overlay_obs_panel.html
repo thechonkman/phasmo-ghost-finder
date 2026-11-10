@@ -10,9 +10,16 @@
           <button class="btn" id="gameStart">Start Phasmophobia</button>
         </div>
         <p class="note" id="clipInfo">No clip saved yet. Press the save hotkey in game right after something happens.</p>
-        <div class="row" style="margin-top:8px"><button class="btn" id="askOnline">Ask Claude about this clip</button></div>
-        <p class="note" style="margin-top:6px">Opens the online finder in your browser and shows the clip in its folder. There, press C or Choose clip to send it.</p>
+        <div class="row" style="margin-top:8px"><button class="btn" id="askOnline">Ask Claude about this clip</button><button class="btn" id="copyNotes">Copy notes</button></div>
+        <p class="note" style="margin-top:6px">Opens the online finder in your browser, shows the clip in its folder and copies your notes (evidence, answers, footsteps). There, press Ctrl+V to load the notes, then C to send the clip.</p>
+        <p class="status" id="copyMsg"></p>
         <div id="obsErr"></div>
+      </section>
+      <section class="box" id="clipsBox">
+        <h2>Saved clips</h2>
+        <p class="sub" id="clipsSub">Clips this app saved. Recycle moves them to the Recycle Bin, so you can still restore them.</p>
+        <ul class="cliplist" id="clipList"></ul>
+        <div class="row"><button class="btn" id="trashAll" hidden>Recycle all clips</button><span class="status" id="clipMsg"></span></div>
       </section>
       <section class="box" id="setBox">
         <h2>Settings</h2>
@@ -30,5 +37,7 @@
         <label class="note chk"><input type="checkbox" id="sShow"> Open the clip's folder after each save</label>
         <p class="note">Keys use names like Insert, F7, Ctrl+Shift+S or Alt+G. Pick keys the game doesn't use.</p>
         <div class="row"><button class="btn primary" id="sApply">Save settings</button><span class="status" id="sMsg"></span></div>
+        <p class="note" id="updText">Version —</p>
+        <div class="row"><button class="btn primary" id="updBtn" hidden>Restart to update</button></div>
         <div class="row" style="margin-top:10px"><button class="btn" id="quitApp">Quit Phasmo Ghost Finder</button></div>
       </section>

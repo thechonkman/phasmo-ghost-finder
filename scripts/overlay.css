@@ -28,7 +28,13 @@ body.compact #ov .card .evs{display:none}
 .dot.on{background:var(--ok)}
 .set{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12.5px;margin-top:4px}
 .set input[type=text],.set input[type=password],.set input[type=number]{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:5px 7px;font-family:var(--mono);font-size:12px}
+.set .row{grid-column:1/-1}
 .set .row input{flex:1;min-width:0}
 .chk{display:flex;gap:6px;align-items:center}
 .clipname{font-family:var(--mono);font-size:11.5px;word-break:break-all}
 .modal{z-index:50}
+.cliplist{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:6px}
+.cliplist li{display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg)}
+.cliplist .cn{flex:1 1 140px;min-width:0;font-family:var(--mono);font-size:11px;word-break:break-all}
+.cliplist .ct{color:var(--muted);font-size:11px;width:100%}
+.cliplist .btn{padding:3px 8px;font-size:12px}

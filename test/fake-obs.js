@@ -4,7 +4,7 @@ const crypto = require("crypto");
 
 const sha = (s) => crypto.createHash("sha256").update(s).digest("base64");
 
-function startFakeObs({ port, password, replayEnabled = true }) {
+function startFakeObs({ port, password, replayEnabled = true, clipDir = null }) {
   const state = { replayActive: false, identify: null, requests: [], clipCount: 0, replayEnabled };
   const wss = new WebSocketServer({ port });
   wss.on("connection", (sock) => {
@@ -38,7 +38,9 @@ function startFakeObs({ port, password, replayEnabled = true }) {
         sock.send(JSON.stringify({ op: 7, d: { requestType, requestId, requestStatus: ok ? { result: true, code } : { result: false, code, comment: "fake failure" }, responseData } }));
         if (ok && requestType === "SaveReplayBuffer") {
           state.clipCount++;
-          setTimeout(() => sock.send(JSON.stringify({ op: 5, d: { eventType: "ReplayBufferSaved", eventIntent: 64, eventData: { savedReplayPath: `C:\\Videos\\Replay ${state.clipCount}.mp4` } } })), 150);
+          let savedReplayPath = `C:\\Videos\\Replay ${state.clipCount}.mp4`;
+          if (clipDir) { savedReplayPath = require("path").join(clipDir, `Replay ${state.clipCount}.mp4`); require("fs").writeFileSync(savedReplayPath, Buffer.alloc(2048)); }
+          setTimeout(() => sock.send(JSON.stringify({ op: 5, d: { eventType: "ReplayBufferSaved", eventIntent: 64, eventData: { savedReplayPath } } })), 150);
         }
       }
     });

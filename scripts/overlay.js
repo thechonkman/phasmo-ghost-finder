@@ -62,6 +62,7 @@
       remain: alive.length, names: alive.map((r) => r.g.n),
       bpm: /BPM/.test($("bpm").textContent) ? $("bpm").textContent : "",
       timer: tmI ? $("tm").textContent : "",
+      guess: bestGuess().list.map((x) => x.g.n).slice(0, 2).join(" or "),
       key: keyName(overlayKey)
     };
   }
@@ -100,6 +101,7 @@
       $("clipInfo").innerHTML = `Latest clip${st.saved ? ` (saved ${new Date(st.saved).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })})` : ""}:<br><span class="clipname"></span>`;
       $("clipInfo").querySelector(".clipname").textContent = st.lastClip;
     } else if (st.saving) $("clipInfo").textContent = "Saving clip…";
+    clips = st.clips || []; drawClips(); drawUpdate(st);
     $("obsErr").innerHTML = st.error ? '<div class="warn" style="margin-top:8px"></div>' : "";
     if (st.error) $("obsErr").firstChild.textContent = st.error;
   });
@@ -107,7 +109,39 @@
   $("gameStart").onclick = () => P.launchGame();
   $("obsSave").onclick = () => P.saveClip();
   $("obsShow").onclick = () => P.showClip();
-  $("askOnline").onclick = async () => { await P.showClip(); await P.openSite(); };
+  const copyNotes = async () => { await P.copyText(exportNotes()); $("copyMsg").textContent = "Notes copied. In the online finder, press Ctrl+V."; setTimeout(() => { $("copyMsg").textContent = ""; }, 8000); };
+  $("copyNotes").onclick = copyNotes;
+  $("askOnline").onclick = async () => { await copyNotes(); await P.showClip(); await P.openSite(); };
+
+  // ---- saved clips ----
+  let clips = [], armAll = false, armTimer = null;
+  const esc = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const base = (p) => String(p).split(/[\\/]/).pop();
+  const mb = (b) => (b / 1048576).toFixed(b > 104857600 ? 0 : 1) + " MB";
+  function drawClips() {
+    $("clipList").innerHTML = clips.length ? clips.map((c, i) => `<li><span class="cn" title="${esc(c.path)}">${esc(base(c.path))}</span><button class="btn" data-cshow="${i}">Show</button><button class="btn" data-ctrash="${i}">Recycle</button><span class="ct">${new Date(c.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · ${mb(c.size || 0)}</span></li>`).join("") : '<li class="ct" style="border:0;background:none;padding:0">No saved clips.</li>';
+    $("trashAll").hidden = clips.length < 2;
+    if (!armAll) $("trashAll").textContent = `Recycle all ${clips.length} clips`;
+  }
+  $("clipList").addEventListener("click", async (e) => {
+    const s = e.target.closest("[data-cshow]"), t = e.target.closest("[data-ctrash]");
+    if (s) P.showClipAt(clips[+s.dataset.cshow].path);
+    if (t) { t.disabled = true; const r = await P.trashClip(clips[+t.dataset.ctrash].path); $("clipMsg").textContent = r.ok ? "Moved to the Recycle Bin." : r.error; }
+  });
+  $("trashAll").onclick = async () => {
+    if (!armAll) { armAll = true; $("trashAll").textContent = `Click again to recycle ${clips.length} clips`; clearTimeout(armTimer); armTimer = setTimeout(() => { armAll = false; drawClips(); }, 5000); return; }
+    armAll = false; clearTimeout(armTimer);
+    const r = await P.trashAllClips(); $("clipMsg").textContent = r.ok ? "All clips moved to the Recycle Bin." : r.error;
+  };
+
+  // ---- updates ----
+  function drawUpdate(st) {
+    const u = st.update || {}, v = st.appVersion ? "Version " + st.appVersion : "";
+    const msg = { checking: "checking for updates…", current: "up to date.", downloading: `downloading version ${u.version || ""} (${u.percent || 0}%)…`, ready: `version ${u.version} is ready. It installs when you quit, or restart now.`, error: "couldn't check for updates right now; it will try again later." }[u.state] || "";
+    $("updText").textContent = v + (msg ? ": " + msg : "");
+    $("updBtn").hidden = u.state !== "ready";
+  }
+  $("updBtn").onclick = () => P.installUpdate();
 
   // ---- settings ----
   async function loadSet() {

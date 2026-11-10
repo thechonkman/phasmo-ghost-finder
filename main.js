@@ -2,11 +2,12 @@
 // - A full-screen, see-through overlay with the ghost finder's panels, opened and closed with one key.
 // - A small corner info box (HUD) while the overlay is closed; it never takes clicks.
 // - Starts OBS with its replay buffer and saves clips on a global hotkey.
-const { app, BrowserWindow, ipcMain, globalShortcut, shell, dialog, Menu, screen } = require("electron");
+const { app, BrowserWindow, ipcMain, globalShortcut, shell, dialog, Menu, screen, clipboard } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn, execFile, execFileSync } = require("child_process");
 const { default: OBSWebSocket, EventSubscription } = require("obs-websocket-js/json");
+const { autoUpdater } = require("electron-updater");
 
 const STEAM_GAME = "steam://rungameid/739630";
 const DEFAULTS = {
@@ -22,6 +23,7 @@ const DEFAULTS = {
   overlayHotkey: "Insert",
   tapHotkey: "F8",
   zoom: 1,
+  clips: [], // clips this app saved: [{ path, at }]
   websiteUrl: "https://claude.ai/artifact/HE7x9Ednqk59vpxVDTZv2G"
 };
 
@@ -43,6 +45,7 @@ let lastClipAt = null;
 let lastError = "";
 let hotkeyError = "";
 let quitting = false;
+let update = { state: "idle", version: null, percent: 0, error: "" };
 
 // ---------- settings ----------
 const cfgFile = () => path.join(app.getPath("userData"), "settings.json");
@@ -83,12 +86,35 @@ function findObs() {
   return obsFromRegistry() || [...pf, ...OBS_GUESSES].find((p) => fs.existsSync(p)) || null;
 }
 
+// ---------- saved clips ----------
+// Only clips this app saved are listed, and only those can be sent to the Recycle Bin.
+function liveClips() {
+  const before = (cfg.clips || []).length;
+  cfg.clips = (cfg.clips || []).filter((c) => c && typeof c.path === "string" && fs.existsSync(c.path));
+  if (cfg.clips.length !== before) saveCfg();
+  return cfg.clips.map((c) => { let size = 0; try { size = fs.statSync(c.path).size; } catch {} return { ...c, size }; });
+}
+const isOurClip = (p) => (cfg.clips || []).some((c) => c.path === p);
+async function trashClip(p) {
+  if (!isOurClip(p)) return { ok: false, error: "That file isn't one of this app's clips." };
+  try {
+    await shell.trashItem(p);
+    cfg.clips = cfg.clips.filter((c) => c.path !== p);
+    if (lastClip === p) lastClip = null;
+    saveCfg();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "Couldn't move it to the Recycle Bin: " + ((e && e.message) || e) + ". Close any program using the clip and try again." };
+  }
+}
+
 // ---------- status to both windows ----------
 function send(w, ch, data) { if (w && !w.isDestroyed()) w.webContents.send(ch, data); }
 function pushStatus(extra = {}) {
   const st = {
     connected, lastClip, saved: lastClipAt, error: [hotkeyError, lastError].filter(Boolean).join(" "),
-    obsPath: findObs(), saveHotkey: cfg.saveHotkey, overlayHotkey: cfg.overlayHotkey, tapHotkey: cfg.tapHotkey, ...extra
+    obsPath: findObs(), saveHotkey: cfg.saveHotkey, overlayHotkey: cfg.overlayHotkey, tapHotkey: cfg.tapHotkey,
+    clips: liveClips(), appVersion: app.getVersion(), update, ...extra
   };
   send(gui, "obs:status", st);
   send(hud, "obs:status", st);
@@ -124,6 +150,10 @@ obs.on("ConnectionClosed", () => { connected = false; pushStatus(); });
 obs.on("ReplayBufferSaved", (d) => {
   lastClip = d && d.savedReplayPath ? d.savedReplayPath : lastClip;
   lastClipAt = Date.now();
+  if (lastClip) {
+    cfg.clips = [{ path: lastClip, at: lastClipAt }, ...(cfg.clips || []).filter((c) => c.path !== lastClip)].slice(0, 100);
+    saveCfg();
+  }
   lastError = "";
   pushStatus();
   if (cfg.showClipAfterSave && lastClip) shell.showItemInFolder(lastClip);
@@ -258,6 +288,16 @@ ipcMain.handle("obs:launch", async () => { const ok = await launchObs(); if (ok)
 ipcMain.handle("obs:connect", () => connectObs());
 ipcMain.handle("obs:save", () => saveClip());
 ipcMain.handle("clip:show", () => { if (lastClip && fs.existsSync(lastClip)) { shell.showItemInFolder(lastClip); return true; } return false; });
+ipcMain.handle("clips:show", (_e, p) => { if (isOurClip(p) && fs.existsSync(p)) { shell.showItemInFolder(p); return true; } return false; });
+ipcMain.handle("clips:trash", async (_e, p) => { const r = await trashClip(p); pushStatus(); return r; });
+ipcMain.handle("clips:trashAll", async () => {
+  const errors = [];
+  for (const c of [...(cfg.clips || [])]) { const r = await trashClip(c.path); if (!r.ok) errors.push(r.error); }
+  pushStatus();
+  return { ok: !errors.length, error: errors[0] || "" };
+});
+ipcMain.handle("copy:text", (_e, t) => { clipboard.writeText(String(t || "")); return true; });
+ipcMain.handle("update:install", () => { if (update.state === "ready") { quitting = true; autoUpdater.quitAndInstall(true, true); return true; } return false; });
 ipcMain.handle("game:launch", () => { shell.openExternal(STEAM_GAME); return true; });
 ipcMain.handle("site:open", () => { shell.openExternal(cfg.websiteUrl); return true; });
 ipcMain.handle("ov:hide", () => { hideOverlay(); return true; });
@@ -290,6 +330,25 @@ ipcMain.handle("cfg:browseObs", async () => {
   return r.canceled ? null : r.filePaths[0];
 });
 
+// ---------- automatic updates ----------
+// New versions are published as GitHub releases by the build workflow. The app checks on start and
+// every 30 minutes, downloads in the background, and installs when you quit (or right away if you click Restart).
+function setupUpdates() {
+  if (!app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  const set = (u) => { update = { ...update, ...u }; pushStatus(); };
+  autoUpdater.on("checking-for-update", () => set({ state: "checking", error: "" }));
+  autoUpdater.on("update-not-available", () => set({ state: "current" }));
+  autoUpdater.on("update-available", (i) => set({ state: "downloading", version: i && i.version, percent: 0 }));
+  autoUpdater.on("download-progress", (p) => set({ state: "downloading", percent: Math.round((p && p.percent) || 0) }));
+  autoUpdater.on("update-downloaded", (i) => set({ state: "ready", version: i && i.version }));
+  autoUpdater.on("error", (e) => set({ state: "error", error: String((e && e.message) || e).split("\n")[0] }));
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  setTimeout(check, 8000);
+  setInterval(check, 30 * 60 * 1000);
+}
+
 // ---------- app lifecycle ----------
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
@@ -299,6 +358,7 @@ else {
     loadCfg();
     createWindows();
     registerHotkeys();
+    setupUpdates();
     // Start the game a few seconds after OBS so Game Capture is ready, whether or not OBS was found.
     const startGame = () => { if (cfg.autoStartGame) shell.openExternal(STEAM_GAME); };
     if (cfg.autoStartObs) {

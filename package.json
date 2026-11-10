@@ -11,6 +11,7 @@
     "build:overlay": "python3 scripts/build_overlay.py"
   },
   "dependencies": {
+    "electron-updater": "6.3.9",
     "obs-websocket-js": "5.0.6"
   },
   "devDependencies": {
@@ -34,10 +35,19 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "PhasmoGhostFinder-Setup-${version}.${ext}"
     },
     "portable": {
       "artifactName": "PhasmoGhostFinder-portable-${version}.exe"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "thechonkman",
+        "repo": "phasmo-ghost-finder",
+        "releaseType": "release"
+      }
+    ]
   }
 }
