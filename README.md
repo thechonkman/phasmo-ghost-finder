@@ -1,45 +1,38 @@
 # Phasmo Ghost Finder
 
-A small always-on-top Windows window for Phasmophobia. It:
+An in-game overlay for Phasmophobia on Windows.
 
-- Narrows down all 30 ghosts from evidence, hunt behaviour and deduction questions, for any difficulty including custom and 0-evidence.
-- Starts OBS with its Replay Buffer running, so the last stretch of gameplay is always being recorded.
-- Saves a clip from anywhere, even mid-game, with one hotkey (**Ctrl+Shift+S** by default).
-- Shows or hides itself with **Ctrl+Shift+H**.
-- Reads ghost speed from footsteps: press **F8** on each footstep during a hunt, even while the game is focused.
+- **Opens over the game with one key.** Press **Insert** to bring up the overlay and again (or **Esc**) to go back to the game.
+- **Finds the ghost.** The overlay's panels narrow down all 30 ghosts from evidence, hunt behaviour and deduction questions, on any difficulty including custom and 0-evidence.
+- **Shows a corner info box while you play.** It lists your difficulty, marked evidence and the ghosts still possible. Clicks pass straight through it to the game.
+- **Records clips.** It starts OBS with its Replay Buffer running. **Ctrl+Shift+S** saves the last 30 seconds from anywhere.
+- **Reads ghost speed from footsteps.** Press **F8** on each footstep during a hunt.
 
-It runs offline and costs nothing to use. To have Claude look at a clip, click **Ask Claude about this clip**. That opens the online finder on claude.ai and shows the clip in its folder, ready to send.
+It runs offline and costs nothing to use. To have Claude look at a clip, click **Ask Claude about this clip**. That opens the online finder on claude.ai and shows the clip in its folder.
+
+Full setup steps are in the Phasmo Ghost Finder Setup Guide.
 
 ## Download
 
-1. Open the **Releases** page of this repo and download either:
-   - `Phasmo Ghost Finder Setup 1.0.0.exe` (installs with a Start-menu shortcut), or
-   - `PhasmoGhostFinder-portable-1.0.0.exe` (runs without installing).
-2. Windows SmartScreen may warn that the app is unrecognised, because it isn't code-signed. Click **More info → Run anyway**.
+Open the **Actions** tab, click the newest green **Build Windows app** run, and download **PhasmoGhostFinder-windows** at the bottom. Unzip it and run `Phasmo Ghost Finder Setup 1.0.0.exe`.
 
-If there's no release yet, open the **Actions** tab, click the latest successful **Build Windows app** run, and download the `PhasmoGhostFinder-windows` file at the bottom.
+Windows SmartScreen may warn that the app is unrecognised, because it isn't code-signed. Click **More info → Run anyway**.
 
-## One-time OBS setup
+## Keys
 
-You need OBS Studio 28 or newer from [obsproject.com](https://obsproject.com).
+| Key | What it does |
+| --- | --- |
+| Insert | Open or close the overlay |
+| Esc | Close the overlay |
+| Ctrl+Shift+S | Save the last 30 seconds as a clip |
+| F8 | Tap a ghost footstep |
+| 1–7, R, T, F | Evidence, new contract, smudge timer, footstep tap (while the overlay is open) |
 
-1. **Capture the game.** In OBS, add a **Game Capture** source and set it to capture Phasmophobia.
-2. **Turn on the WebSocket server.** Go to **Tools → WebSocket Server Settings**, tick **Enable WebSocket server**, and click **Show Connect Info** to copy the password. Paste it into this app under **Settings → WebSocket password**.
-3. **Turn on the Replay Buffer.** Go to **Settings → Output → Replay Buffer**, tick **Enable Replay Buffer**, and set the maximum time to 30–60 seconds.
-4. **Save clips as MP4.** Under **Settings → Output → Recording**, set the format to **MP4**. The online finder can't read MKV.
+Change the first three in the overlay's **Settings** panel. Laptops without an Insert key can use something like F7.
 
-## Using it
+## For developers
 
-- **Start the app before the game.** It starts OBS (minimised to the tray) with the Replay Buffer running. The dot in the OBS panel turns green when connected.
-- **Play in a window.** Set Phasmophobia to **windowed** or **borderless** in its display settings. In exclusive fullscreen the game covers every window, including this one.
-- **Mark evidence.** Click the app, then press **1–7**, or click the buttons. **R** starts a new contract.
-- **Save a clip.** After a hunt or ghost event, press the save hotkey. The panel shows where it was saved.
-
-## Run from source
-
-```
-npm install
-npm start
-```
-
-Build the Windows installer yourself with `npm run dist`. It must run on Windows.
+- `web/finder.html` is the online finder and the single source of the ghost data and logic.
+- `npm run build:overlay` builds `renderer/index.html` (the overlay) from it, using `scripts/overlay.*`.
+- `npm test` runs the app against a fake OBS and clicks through it (Linux, needs xvfb).
+- `npm start` runs the app; `npm run dist` builds the Windows installer (on Windows).

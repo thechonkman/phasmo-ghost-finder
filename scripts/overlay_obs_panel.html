@@ -1,0 +1,34 @@
+      <section class="box" id="obsBox">
+        <h2>OBS clips</h2>
+        <p class="sub" id="obsState"><span class="dot" id="obsDot"></span><span id="obsText">Connecting to OBS…</span></p>
+        <div class="row">
+          <button class="btn primary" id="obsSave">Save clip <kbd id="saveKey">Ctrl+Shift+S</kbd></button>
+          <button class="btn" id="obsShow" disabled>Show clip</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn" id="obsStart">Start OBS</button>
+          <button class="btn" id="gameStart">Start Phasmophobia</button>
+        </div>
+        <p class="note" id="clipInfo">No clip saved yet. Press the save hotkey in game right after something happens.</p>
+        <div class="row" style="margin-top:8px"><button class="btn" id="askOnline">Ask Claude about this clip</button></div>
+        <p class="note" style="margin-top:6px">Opens the online finder in your browser and shows the clip in its folder. There, press C or Choose clip to send it.</p>
+        <div id="obsErr"></div>
+      </section>
+      <section class="box" id="setBox">
+        <h2>Settings</h2>
+        <div class="set">
+          <label for="sOverlay">Open/close overlay</label><input type="text" id="sOverlay">
+          <label for="sSave">Save clip</label><input type="text" id="sSave">
+          <label for="sTap">Tap footstep</label><input type="text" id="sTap">
+          <label for="sObs">OBS location</label><div class="row" style="flex-wrap:nowrap"><input type="text" id="sObs" placeholder="found automatically"><button class="btn" id="sBrowse">Browse</button></div>
+          <label for="sPort">OBS WebSocket port</label><input type="number" id="sPort">
+          <label for="sPw">OBS WebSocket password</label><input type="password" id="sPw" placeholder="from OBS → Tools → WebSocket Server Settings">
+        </div>
+        <label class="note chk"><input type="checkbox" id="sAuto"> Start OBS when this app opens</label>
+        <label class="note chk"><input type="checkbox" id="sGame"> Start Phasmophobia (Steam) when this app opens</label>
+        <label class="note chk"><input type="checkbox" id="sHud"> Show the info box in the corner while playing</label>
+        <label class="note chk"><input type="checkbox" id="sShow"> Open the clip's folder after each save</label>
+        <p class="note">Keys use names like Insert, F7, Ctrl+Shift+S or Alt+G. Pick keys the game doesn't use.</p>
+        <div class="row"><button class="btn primary" id="sApply">Save settings</button><span class="status" id="sMsg"></span></div>
+        <div class="row" style="margin-top:10px"><button class="btn" id="quitApp">Quit Phasmo Ghost Finder</button></div>
+      </section>

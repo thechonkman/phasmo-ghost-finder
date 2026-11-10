@@ -1,12 +1,14 @@
-// Phasmo Ghost Finder - desktop overlay
-// Starts OBS with its replay buffer, saves clips on a global hotkey,
-// and shows the ghost finder in an always-on-top window.
+// Phasmo Ghost Finder - in-game overlay
+// - A full-screen, see-through overlay with the ghost finder's panels, opened and closed with one key.
+// - A small corner info box (HUD) while the overlay is closed; it never takes clicks.
+// - Starts OBS with its replay buffer and saves clips on a global hotkey.
 const { app, BrowserWindow, ipcMain, globalShortcut, shell, dialog, Menu, screen } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn, execFile, execFileSync } = require("child_process");
-const OBSWebSocket = require("obs-websocket-js/json").default;
+const { default: OBSWebSocket, EventSubscription } = require("obs-websocket-js/json");
 
+const STEAM_GAME = "steam://rungameid/739630";
 const DEFAULTS = {
   obsPath: "",
   host: "127.0.0.1",
@@ -15,10 +17,11 @@ const DEFAULTS = {
   autoStartObs: true,
   autoStartGame: false,
   showClipAfterSave: false,
+  showHud: true,
   saveHotkey: "CommandOrControl+Shift+S",
-  toggleHotkey: "CommandOrControl+Shift+H",
-  alwaysOnTop: true,
-  opacity: 1,
+  overlayHotkey: "Insert",
+  tapHotkey: "F8",
+  zoom: 1,
   websiteUrl: "https://claude.ai/artifact/HE7x9Ednqk59vpxVDTZv2G"
 };
 
@@ -29,7 +32,8 @@ const OBS_GUESSES = [
   "C:\\Program Files\\Steam\\steamapps\\common\\OBS Studio\\bin\\64bit\\obs64.exe"
 ];
 
-let win = null;
+let gui = null; // the overlay
+let hud = null; // the corner info box
 let cfg = { ...DEFAULTS };
 const obs = new OBSWebSocket();
 let connected = false;
@@ -37,6 +41,8 @@ let connecting = null;
 let lastClip = null;
 let lastClipAt = null;
 let lastError = "";
+let hotkeyError = "";
+let quitting = false;
 
 // ---------- settings ----------
 const cfgFile = () => path.join(app.getPath("userData"), "settings.json");
@@ -51,7 +57,7 @@ function saveCfg() {
   } catch (e) { lastError = "Couldn't save settings: " + e.message; }
 }
 
-// ---------- status to the window ----------
+// ---------- finding OBS ----------
 // OBS's installer records its folder in the registry; use that before guessing.
 let regObs;
 function obsFromRegistry() {
@@ -76,12 +82,16 @@ function findObs() {
     .filter(Boolean).map((d) => path.join(d, "obs-studio", "bin", "64bit", "obs64.exe"));
   return obsFromRegistry() || [...pf, ...OBS_GUESSES].find((p) => fs.existsSync(p)) || null;
 }
+
+// ---------- status to both windows ----------
+function send(w, ch, data) { if (w && !w.isDestroyed()) w.webContents.send(ch, data); }
 function pushStatus(extra = {}) {
-  if (!win || win.isDestroyed()) return;
-  win.webContents.send("obs:status", {
-    connected, lastClip, saved: lastClipAt, error: lastError, obsPath: findObs(),
-    saveHotkey: cfg.saveHotkey, toggleHotkey: cfg.toggleHotkey, ...extra
-  });
+  const st = {
+    connected, lastClip, saved: lastClipAt, error: [hotkeyError, lastError].filter(Boolean).join(" "),
+    obsPath: findObs(), saveHotkey: cfg.saveHotkey, overlayHotkey: cfg.overlayHotkey, tapHotkey: cfg.tapHotkey, ...extra
+  };
+  send(gui, "obs:status", st);
+  send(hud, "obs:status", st);
 }
 
 // ---------- OBS process ----------
@@ -109,7 +119,7 @@ async function launchObs() {
   }
 }
 
-// ---------- OBS websocket ----------
+// ---------- OBS remote control ----------
 obs.on("ConnectionClosed", () => { connected = false; pushStatus(); });
 obs.on("ReplayBufferSaved", (d) => {
   lastClip = d && d.savedReplayPath ? d.savedReplayPath : lastClip;
@@ -126,7 +136,7 @@ async function connectObs({ waitForStart = false } = {}) {
     const tries = waitForStart ? 20 : 1; // up to ~40 s while OBS boots
     for (let i = 0; i < tries; i++) {
       try {
-        await obs.connect(`ws://${cfg.host}:${cfg.port}`, cfg.password || undefined);
+        await obs.connect(`ws://${cfg.host}:${cfg.port}`, cfg.password || undefined, { eventSubscriptions: EventSubscription.All });
         connected = true; lastError = "";
         await ensureReplayBuffer();
         pushStatus();
@@ -169,104 +179,139 @@ async function saveClip() {
   }
 }
 
+// ---------- overlay show / hide ----------
+function overlayVisible() { return !!(gui && !gui.isDestroyed() && gui.isVisible()); }
+function placeHud() {
+  if (!hud || hud.isDestroyed()) return;
+  const area = screen.getPrimaryDisplay().workArea;
+  const [w, h] = hud.getSize();
+  hud.setPosition(area.x + area.width - w - 12, area.y + 12);
+}
+function showOverlay() {
+  if (!gui || gui.isDestroyed()) return;
+  // Cover whichever screen the mouse is on, edge to edge.
+  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  gui.setBounds(d.bounds);
+  gui.show();
+  gui.setAlwaysOnTop(true, "screen-saver");
+  gui.focus();
+  gui.webContents.focus();
+  if (hud && !hud.isDestroyed()) hud.hide();
+  send(gui, "ov:shown", null);
+}
+function hideOverlay() {
+  if (gui && !gui.isDestroyed()) gui.hide(); // Windows hands focus back to the game window underneath.
+  if (cfg.showHud && hud && !hud.isDestroyed()) { placeHud(); hud.showInactive(); hud.setAlwaysOnTop(true, "screen-saver"); }
+}
+function toggleOverlay() { overlayVisible() ? hideOverlay() : showOverlay(); }
+
 // ---------- hotkeys ----------
 function registerHotkeys() {
   globalShortcut.unregisterAll();
   const bad = [];
-  try { if (!globalShortcut.register(cfg.saveHotkey, () => { saveClip(); })) bad.push(cfg.saveHotkey); } catch { bad.push(cfg.saveHotkey); }
-  try {
-    if (!globalShortcut.register(cfg.toggleHotkey, () => {
-      if (!win) return;
-      if (win.isVisible()) win.hide(); else { win.showInactive(); win.setAlwaysOnTop(cfg.alwaysOnTop, "screen-saver"); }
-    })) bad.push(cfg.toggleHotkey);
-  } catch { bad.push(cfg.toggleHotkey); }
-  try { if (!globalShortcut.register("F8", () => { if (win && !win.isDestroyed()) win.webContents.send("tap"); })) bad.push("F8"); } catch { bad.push("F8"); }
-  if (bad.length) lastError = "These hotkeys are taken by another app: " + bad.join(", ") + ". Pick different ones in Settings.";
+  const reg = (accel, fn) => {
+    try { if (!accel || !globalShortcut.register(accel, fn)) bad.push(accel || "(blank)"); }
+    catch { bad.push(accel || "(blank)"); }
+  };
+  reg(cfg.overlayHotkey, toggleOverlay);
+  reg(cfg.saveHotkey, () => { saveClip(); });
+  reg(cfg.tapHotkey, () => send(gui, "tap", null));
+  hotkeyError = bad.length ? "These hotkeys couldn't be used (taken by another app, or not a valid key): " + bad.join(", ") + ". Pick different ones in Settings." : "";
 }
 
-// ---------- window ----------
-function createWindow() {
-  // Reuse the last window size and position if it still fits on a connected screen.
-  let b = cfg.bounds && Number.isFinite(cfg.bounds.width) ? cfg.bounds : null;
-  if (b) {
-    const area = screen.getDisplayMatching(b).workArea;
-    const visible = b.x < area.x + area.width - 60 && b.x + b.width > area.x + 60 && b.y >= area.y - 20 && b.y < area.y + area.height - 60;
-    if (!visible) b = null;
-  }
-  win = new BrowserWindow({
-    width: b ? b.width : 460, height: b ? b.height : 820, ...(b ? { x: b.x, y: b.y } : {}), minWidth: 340, minHeight: 300,
-    title: "Phasmo Ghost Finder",
-    backgroundColor: "#0d0e12",
-    alwaysOnTop: cfg.alwaysOnTop,
-    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true }
-  });
-  win.setAlwaysOnTop(cfg.alwaysOnTop, "screen-saver");
-  win.setOpacity(Math.min(1, Math.max(0.3, Number(cfg.opacity) || 1)));
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\//.test(url)) shell.openExternal(url);
-    return { action: "deny" };
-  });
-  win.webContents.on("will-navigate", (e, url) => { if (!url.startsWith("file://")) { e.preventDefault(); if (/^https:\/\//.test(url)) shell.openExternal(url); } });
-  let boundsTimer = null;
-  const keepBounds = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(() => { if (win && !win.isDestroyed() && !win.isMinimized()) { cfg.bounds = win.getBounds(); saveCfg(); } }, 500); };
-  win.on("move", keepBounds);
-  win.on("resize", keepBounds);
-  win.on("close", () => { if (!win.isMinimized()) { cfg.bounds = win.getBounds(); saveCfg(); } });
-  win.loadFile(path.join(__dirname, "renderer", "index.html"));
-  win.webContents.on("did-finish-load", () => pushStatus());
+// ---------- windows ----------
+function guardLinks(w) {
+  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: "deny" }; });
+  w.webContents.on("will-navigate", (e, url) => { if (!url.startsWith("file://")) { e.preventDefault(); if (/^https:\/\//.test(url)) shell.openExternal(url); } });
 }
+function createWindows() {
+  const prefs = { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true };
+  const d = screen.getPrimaryDisplay();
+  gui = new BrowserWindow({
+    ...d.bounds, show: false, frame: false, transparent: true, backgroundColor: "#00000000", hasShadow: false,
+    resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    alwaysOnTop: true, skipTaskbar: false, title: "Phasmo Ghost Finder", webPreferences: prefs
+  });
+  guardLinks(gui);
+  gui.loadFile(path.join(__dirname, "renderer", "index.html"));
+  gui.webContents.on("did-finish-load", () => {
+    gui.webContents.setZoomFactor(clampZoom(cfg.zoom));
+    pushStatus();
+    showOverlay(); // show once on start so the difficulty can be picked
+  });
+  gui.on("close", (e) => { if (!quitting) { e.preventDefault(); hideOverlay(); } });
+
+  hud = new BrowserWindow({
+    width: 300, height: 250, show: false, frame: false, transparent: true, backgroundColor: "#00000000", hasShadow: false,
+    resizable: false, movable: false, focusable: false, skipTaskbar: true, alwaysOnTop: true,
+    title: "Phasmo Ghost Finder HUD", webPreferences: prefs
+  });
+  hud.setIgnoreMouseEvents(true); // clicks go straight through to the game
+  guardLinks(hud);
+  hud.loadFile(path.join(__dirname, "renderer", "hud.html"));
+  hud.webContents.on("did-finish-load", () => pushStatus());
+}
+const clampZoom = (z) => Math.min(1.6, Math.max(0.6, Number(z) || 1));
 
 // ---------- IPC ----------
 ipcMain.handle("obs:launch", async () => { const ok = await launchObs(); if (ok) return connectObs({ waitForStart: true }); return false; });
 ipcMain.handle("obs:connect", () => connectObs());
 ipcMain.handle("obs:save", () => saveClip());
 ipcMain.handle("clip:show", () => { if (lastClip && fs.existsSync(lastClip)) { shell.showItemInFolder(lastClip); return true; } return false; });
-ipcMain.handle("game:launch", () => { shell.openExternal("steam://rungameid/739630"); return true; });
+ipcMain.handle("game:launch", () => { shell.openExternal(STEAM_GAME); return true; });
 ipcMain.handle("site:open", () => { shell.openExternal(cfg.websiteUrl); return true; });
+ipcMain.handle("ov:hide", () => { hideOverlay(); return true; });
+ipcMain.handle("ov:zoom", (_e, step) => {
+  cfg.zoom = clampZoom(step === 0 ? 1 : Math.round((cfg.zoom + step) * 10) / 10);
+  saveCfg();
+  if (gui && !gui.isDestroyed()) gui.webContents.setZoomFactor(cfg.zoom);
+  return cfg.zoom;
+});
+ipcMain.handle("app:quit", () => { quitting = true; app.quit(); return true; });
+ipcMain.on("hud:update", (_e, data) => send(hud, "hud:data", data));
 ipcMain.handle("cfg:get", () => ({ ...cfg, password: cfg.password ? "********" : "", hasPassword: !!cfg.password, detectedObs: findObs() }));
 ipcMain.handle("cfg:set", async (_e, patch) => {
-  const allowed = ["obsPath", "host", "port", "password", "autoStartObs", "autoStartGame", "showClipAfterSave", "saveHotkey", "toggleHotkey", "alwaysOnTop", "opacity", "websiteUrl"];
+  const allowed = ["obsPath", "host", "port", "password", "autoStartObs", "autoStartGame", "showClipAfterSave", "showHud", "saveHotkey", "overlayHotkey", "tapHotkey", "websiteUrl"];
   for (const k of allowed) if (patch && Object.prototype.hasOwnProperty.call(patch, k)) {
     if (k === "password" && patch.password === "********") continue;
-    cfg[k] = k === "port" ? Number(patch.port) || 4455 : k === "opacity" ? Number(patch.opacity) || 1 : patch[k];
+    cfg[k] = k === "port" ? Number(patch.port) || 4455 : patch[k];
   }
   if (!/^https:\/\//.test(cfg.websiteUrl)) cfg.websiteUrl = DEFAULTS.websiteUrl;
   saveCfg();
   lastError = "";
   registerHotkeys();
-  if (win) { win.setAlwaysOnTop(!!cfg.alwaysOnTop, "screen-saver"); win.setOpacity(Math.min(1, Math.max(0.3, cfg.opacity))); }
   if (connected) { try { await obs.disconnect(); } catch {} connected = false; }
   await connectObs();
   pushStatus();
   return true;
 });
 ipcMain.handle("cfg:browseObs", async () => {
-  const r = await dialog.showOpenDialog(win, { title: "Find obs64.exe", properties: ["openFile"], filters: [{ name: "OBS", extensions: ["exe"] }] });
+  const r = await dialog.showOpenDialog(gui, { title: "Find obs64.exe", properties: ["openFile"], filters: [{ name: "OBS", extensions: ["exe"] }] });
   return r.canceled ? null : r.filePaths[0];
 });
-ipcMain.handle("win:opacity", (_e, v) => { const o = Math.min(1, Math.max(0.3, Number(v) || 1)); cfg.opacity = o; saveCfg(); if (win) win.setOpacity(o); return o; });
 
 // ---------- app lifecycle ----------
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
-  app.on("second-instance", () => { if (win) { win.show(); win.focus(); } });
+  app.on("second-instance", () => showOverlay());
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
     loadCfg();
-    createWindow();
+    createWindows();
     registerHotkeys();
+    // Start the game a few seconds after OBS so Game Capture is ready, whether or not OBS was found.
+    const startGame = () => { if (cfg.autoStartGame) shell.openExternal(STEAM_GAME); };
     if (cfg.autoStartObs) {
-      if (await launchObs()) {
-        await connectObs({ waitForStart: true });
-        // Start the game after OBS so Game Capture can hook it as it opens.
-        if (cfg.autoStartGame) shell.openExternal("steam://rungameid/739630");
-      }
+      const started = await launchObs();
+      setTimeout(startGame, started ? 5000 : 0);
+      if (started) await connectObs({ waitForStart: true });
     } else {
-      if (cfg.autoStartGame) shell.openExternal("steam://rungameid/739630");
+      startGame();
       await connectObs();
     }
     pushStatus();
   });
+  app.on("before-quit", () => { quitting = true; });
   app.on("will-quit", () => { globalShortcut.unregisterAll(); try { obs.disconnect(); } catch {} });
   app.on("window-all-closed", () => app.quit());
 }

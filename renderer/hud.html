@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'none'">
+<title>Phasmo Ghost Finder HUD</title>
+<style>
+/* Corner info box shown while the overlay is closed. It never takes clicks. */
+[hidden]{display:none!important}
+html,body{margin:0;background:transparent;overflow:hidden;font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;color:#e4e2dc;font-size:12.5px;line-height:1.4}
+.hud{margin:0;padding:9px 11px;background:rgba(13,14,18,.82);border:1px solid #262a35;border-radius:8px;display:flex;flex-direction:column;gap:5px}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.t{font-family:"Special Elite","Courier New",monospace;font-size:14px}
+.m{color:#8d8f99;font-size:11px}
+.n{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums}
+.found{color:#c7b3ff}.ruled{color:#e0675e;text-decoration:line-through}
+.names{color:#cfccc4}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#e0675e;margin-right:4px;vertical-align:middle}
+.dot.on{background:#7fcf9a}
+</style>
+</head><body>
+<div class="hud">
+  <div class="top"><span class="t" id="title">Ghost Finder</span><span class="m"><span class="dot" id="obs"></span><span id="obsTxt">OBS</span></span></div>
+  <div id="diff" class="m">Pick a difficulty in the overlay</div>
+  <div id="ev"></div>
+  <div><b class="n" id="remain">30</b> possible: <span class="names" id="names"></span></div>
+  <div id="extra" class="m n"></div>
+  <div class="m">Press <b id="key">Insert</b> to open the overlay</div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+if (window.phasmo) {
+  window.phasmo.onHud((d) => {
+    $("diff").textContent = d.diff ? `${d.diff} · ${d.evi} evidence` : "Pick a difficulty in the overlay";
+    const ev = [...d.found.map((e) => `<span class="found">${esc(e)}</span>`), ...d.ruled.map((e) => `<span class="ruled">${esc(e)}</span>`)];
+    $("ev").innerHTML = ev.length ? ev.join(" · ") : '<span class="m">No evidence marked yet</span>';
+    $("remain").textContent = d.remain;
+    const shown = d.names.slice(0, 8);
+    $("names").textContent = d.remain === 0 ? "none match, recheck your marks" : shown.join(", ") + (d.names.length > shown.length ? ` +${d.names.length - shown.length} more` : "");
+    $("extra").textContent = [d.timer ? "Smudge " + d.timer : "", d.bpm ? "Footsteps " + d.bpm : ""].filter(Boolean).join("  ·  ");
+    $("key").textContent = d.key || "Insert";
+  });
+  window.phasmo.onStatus((st) => {
+    $("obs").classList.toggle("on", !!st.connected);
+    $("obsTxt").textContent = st.connected ? "Recording" : "OBS off";
+  });
+}
+</script>
+</body></html>

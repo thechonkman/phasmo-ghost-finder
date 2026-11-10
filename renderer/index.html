@@ -1,14 +1,11 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'none'">
-</head><body>
 <title>Phasmo Ghost Finder</title>
-<meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 [hidden]{display:none!important}
-body{margin:0}
+
 /* Layout: sticky case-file bar; left column = journal controls + deduction questions, right = ghost board. Single dark "van at night" look. */
 :root{
   --bg:#0d0e12; --panel:#15171e; --line:#262a35; --fg:#e4e2dc; --muted:#8d8f99;
@@ -121,15 +118,45 @@ textarea{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid 
 .chat{white-space:pre-wrap;font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
 .chat:empty{display:none}
 .status{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- in-game overlay ---------- */
+/* The window is see-through: the game shows behind a dimmed backdrop, panels sit in columns. */
+html,body{background:transparent!important;height:100%;margin:0;overflow:hidden}
+#ov{position:fixed;inset:0;display:flex;flex-direction:column;background:rgba(6,7,10,.58);color:var(--fg)}
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 14px;background:rgba(13,14,18,.96);border-bottom:1px solid var(--line)}
+.brand{font-family:var(--display);font-size:18px;letter-spacing:.02em}
+#gsearch{flex:0 1 260px;min-width:140px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:6px 10px;font:inherit}
+.sizer{display:inline-flex;gap:2px}
+.sizer .btn{padding:5px 8px;font-family:var(--mono);font-size:12px}
+.cols{flex:1;min-height:0;display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;padding:10px 14px;overflow:auto}
+.col{flex:1 1 220px;min-width:205px;max-width:360px;display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 70px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.col.wide{flex:2 1 300px;min-width:270px;max-width:none}
+#ov section.box{background:rgba(21,23,30,.96);box-shadow:0 6px 24px rgba(0,0,0,.45)}
+#ov section.box > h2{cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;margin:-14px -14px 10px;padding:10px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.025);border-radius:8px 8px 0 0}
+#ov section.box > h2::after{content:"▾";font-family:var(--body);color:var(--muted);font-size:13px}
+#ov section.box.collapsed > h2{margin-bottom:-14px;border-bottom:0;border-radius:8px}
+#ov section.box.collapsed > h2::after{content:"▸"}
+#ov section.box.collapsed > :not(h2){display:none!important}
+/* ghost cards: compact rows, details on demand */
+#ov .board{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+#ov .card{padding:9px 10px;gap:5px}
+#ov .card .gname{cursor:pointer}
+#ov .card:not(.open) .stats,#ov .card:not(.open) .tells{display:none}
+#ov .card.open{grid-column:1/-1}
+#ov .card.nomatch{display:none}
+body.compact #ov .card .evs{display:none}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--no);margin-right:6px;vertical-align:middle}
 .dot.on{background:var(--ok)}
-.set{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12.5px;margin-top:8px}
+.set{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12.5px;margin-top:4px}
 .set input[type=text],.set input[type=password],.set input[type=number]{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:5px 7px;font-family:var(--mono);font-size:12px}
-details summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-top:10px}
+.set .row input{flex:1;min-width:0}
+.chk{display:flex;gap:6px;align-items:center}
 .clipname{font-family:var(--mono);font-size:11.5px;word-break:break-all}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
-</style>
+.modal{z-index:50}
 
+</style>
+</head><body>
 <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle">
   <div class="dlg">
     <h2 id="mtitle">What difficulty are you running?</h2>
@@ -146,58 +173,103 @@ details summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-top:10
   </div>
 </div>
 
-<header><div class="wrap">
-  <h1>Phasmo Ghost Finder</h1>
-  <button class="diffchip" id="diffChip" title="Change difficulty"><span>Difficulty</span><b id="diffName">—</b><span id="diffEvi" class="count"></span></button>
-  <span class="count"><b id="remain">30</b> of 30 possible</span>
-  <span class="spacer"></span>
-  <button class="btn" id="compactBtn" aria-pressed="false">Compact</button>
-  <button class="btn" id="resetBtn">New contract <kbd>R</kbd></button>
-</div></header>
-
-<main class="wrap">
-  <div class="col">
-
-    <section class="box" id="obsBox" hidden>
-      <h2>OBS clips</h2>
-      <p class="sub" id="obsState"><span class="dot" id="obsDot"></span><span id="obsText">Connecting to OBS…</span></p>
-      <div class="row">
-        <button class="btn" id="obsStart">Start OBS</button>
-        <button class="btn" id="gameStart">Start Phasmophobia</button>
-        <button class="btn primary" id="obsSave">Save clip <kbd id="saveKey">Ctrl+Shift+S</kbd></button>
-        <button class="btn" id="obsShow" disabled>Show clip</button>
-      </div>
-      <p class="note" id="clipInfo">No clip saved yet. Press the save hotkey in game right after something happens.</p>
-      <div class="row" style="margin-top:8px"><button class="btn" id="askOnline">Ask Claude about this clip</button></div>
-      <p class="note" style="margin-top:6px">Opens the online finder and shows the clip in its folder. There, press C or Choose clip to send it.</p>
-      <div id="obsErr"></div>
-      <details id="setBox"><summary>Settings</summary>
-        <div class="set">
-          <label for="sObs">OBS location</label><div class="row" style="flex-wrap:nowrap"><input type="text" id="sObs" placeholder="found automatically"><button class="btn" id="sBrowse">Browse</button></div>
-          <label for="sPort">WebSocket port</label><input type="number" id="sPort">
-          <label for="sPw">WebSocket password</label><input type="password" id="sPw" placeholder="from OBS → Tools → WebSocket Server Settings">
-          <label for="sSave">Save-clip hotkey</label><input type="text" id="sSave">
-          <label for="sToggle">Show/hide hotkey</label><input type="text" id="sToggle">
-          <label for="sOp">Window opacity</label><input type="range" id="sOp" min="0.3" max="1" step="0.05">
-        </div>
-        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sAuto"> Start OBS when this app opens</label>
-        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sGame"> Start Phasmophobia (Steam) when this app opens</label>
-        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sTop"> Keep this window on top of the game</label>
-        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sShow"> Open the clip's folder after each save</label>
-        <p class="note">Hotkeys use names like Ctrl+Shift+S, Alt+F9 or F8.</p>
-        <div class="row"><button class="btn primary" id="sApply">Save settings</button><span class="status" id="sMsg"></span></div>
-      </details>
-    </section>
-    <section class="box">
+<div id="ov">
+  <div class="topbar">
+    <span class="brand">Phasmo Ghost Finder</span>
+    <button class="diffchip" id="diffChip" title="Change difficulty"><span>Difficulty</span><b id="diffName">—</b><span id="diffEvi" class="count"></span></button>
+    <span class="count"><b id="remain">30</b> of 30 possible</span>
+    <input id="gsearch" type="search" placeholder="Search ghosts…" aria-label="Search ghosts">
+    <span class="spacer"></span>
+    <span class="sizer" role="group" aria-label="Overlay size"><button class="btn" id="zOut" title="Smaller">A−</button><button class="btn" id="zReset" title="Normal size">100%</button><button class="btn" id="zIn" title="Bigger">A+</button></span>
+    <button class="btn" id="compactBtn" aria-pressed="false">Compact</button>
+    <button class="btn" id="layoutReset" title="Open every panel">Open all panels</button>
+    <button class="btn" id="resetBtn">New contract <kbd>R</kbd></button>
+    <button class="btn primary" id="closeOv">Back to game <kbd id="ovKey">Insert</kbd></button>
+  </div>
+  <div class="cols">
+    <div class="col">
+<section class="box" id="evBox">
       <h2>Evidence</h2>
       <p class="sub">Click once = found, twice = ruled out, three times = clear. Keys <kbd>1</kbd>–<kbd>7</kbd>. Counts show how many remaining ghosts have it.</p>
       <div class="evgrid" id="evgrid"></div>
       <div id="eviNote" class="note"></div>
       <div id="eviWarn"></div>
     </section>
+<section class="box" id="smBox">
+      <h2>Smudge timer</h2>
+      <p class="sub">Start when you smudge the ghost. Hunts before 90 s point to a Demon; before 180 s rules out a Spirit.</p>
+      <div class="row"><span class="timer" id="tm">0:00</span><button class="btn" id="tmBtn">Start</button><button class="btn" id="tmReset">Reset</button></div>
+      <div class="marks" id="tmMarks"><span data-t="60">60 s Demon</span> · <span data-t="90">90 s most ghosts</span> · <span data-t="180">180 s Spirit</span></div>
+    </section>
+    </div>
+    <div class="col">
+<section class="box" id="huntBox">
+      <h2>Hunt observations</h2>
+      <div class="lbl">Base speed you saw during a hunt (only mark it if you're sure)</div>
+      <div class="chips" id="speedChips"></div>
+      <div class="lbl">Line-of-sight speed-up (gets gradually faster while chasing you)</div>
+      <div class="chips" id="losChips"></div>
+      <div class="lbl">Highest average sanity a hunt started at</div>
+      <div class="row"><input type="number" id="huntSan" min="0" max="100" placeholder="%" aria-label="Highest average sanity at a hunt"><span class="note" style="margin:0">Leave blank if unsure. Ignore hunts forced by cursed possessions. A 3% margin is allowed for misreads.</span></div>
+      <div class="lbl">Footstep tapper</div>
+      <div class="row"><button class="btn" id="tapBtn">Tap on each footstep <kbd id="tapKey">F</kbd></button><span class="timer" id="bpm">— BPM</span><button class="btn" id="tapReset">Clear</button></div>
+      <p class="note" id="tapVerdict">During a hunt, tap along with the ghost's footsteps from a hiding spot. Four or more taps gives a reading.</p>
+      <div id="tapUse"></div>
+      <p class="note" id="speedNote"></p>
+    </section>
+    </div>
+    <div class="col">
+<section class="box" id="qBox">
+      <h2>Deduction questions</h2>
+      <p class="sub" id="qSub">Answer what you've seen. Each answer only rules ghosts out when the behaviour is certain. Skip anything you're unsure of.</p>
+      <div id="hints"></div>
+      <div id="qs"></div>
+    </section>
+    </div>
+    <div class="col wide">
+      <section class="box" id="ghostBox">
+        <h2 id="boardTitle">Possible ghosts</h2>
+        <p class="sub">Click a ghost's name for its speed, hunt sanity and tells. Underlined evidence is always shown when evidence is reduced.</p>
+        <div class="board" id="board"></div>
+      </section>
+    </div>
+    <div class="col">
+      <section class="box" id="obsBox">
+        <h2>OBS clips</h2>
+        <p class="sub" id="obsState"><span class="dot" id="obsDot"></span><span id="obsText">Connecting to OBS…</span></p>
+        <div class="row">
+          <button class="btn primary" id="obsSave">Save clip <kbd id="saveKey">Ctrl+Shift+S</kbd></button>
+          <button class="btn" id="obsShow" disabled>Show clip</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn" id="obsStart">Start OBS</button>
+          <button class="btn" id="gameStart">Start Phasmophobia</button>
+        </div>
+        <p class="note" id="clipInfo">No clip saved yet. Press the save hotkey in game right after something happens.</p>
+        <div class="row" style="margin-top:8px"><button class="btn" id="askOnline">Ask Claude about this clip</button></div>
+        <p class="note" style="margin-top:6px">Opens the online finder in your browser and shows the clip in its folder. There, press C or Choose clip to send it.</p>
+        <div id="obsErr"></div>
+      </section>
+      <section class="box" id="setBox">
+        <h2>Settings</h2>
+        <div class="set">
+          <label for="sOverlay">Open/close overlay</label><input type="text" id="sOverlay">
+          <label for="sSave">Save clip</label><input type="text" id="sSave">
+          <label for="sTap">Tap footstep</label><input type="text" id="sTap">
+          <label for="sObs">OBS location</label><div class="row" style="flex-wrap:nowrap"><input type="text" id="sObs" placeholder="found automatically"><button class="btn" id="sBrowse">Browse</button></div>
+          <label for="sPort">OBS WebSocket port</label><input type="number" id="sPort">
+          <label for="sPw">OBS WebSocket password</label><input type="password" id="sPw" placeholder="from OBS → Tools → WebSocket Server Settings">
+        </div>
+        <label class="note chk"><input type="checkbox" id="sAuto"> Start OBS when this app opens</label>
+        <label class="note chk"><input type="checkbox" id="sGame"> Start Phasmophobia (Steam) when this app opens</label>
+        <label class="note chk"><input type="checkbox" id="sHud"> Show the info box in the corner while playing</label>
+        <label class="note chk"><input type="checkbox" id="sShow"> Open the clip's folder after each save</label>
+        <p class="note">Keys use names like Insert, F7, Ctrl+Shift+S or Alt+G. Pick keys the game doesn't use.</p>
+        <div class="row"><button class="btn primary" id="sApply">Save settings</button><span class="status" id="sMsg"></span></div>
+        <div class="row" style="margin-top:10px"><button class="btn" id="quitApp">Quit Phasmo Ghost Finder</button></div>
+      </section>
 
-
-    <section class="box" id="aiBox">
+<section class="box" id="aiBox">
       <h2>Ask Claude about a clip</h2>
       <p class="sub">Save a clip with <kbd>Win</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd> (Xbox Game Bar), then send it here. Claude looks at still frames, not sound, and only reports what it can clearly see.</p>
       <div id="aiOff" class="note" hidden></div>
@@ -225,43 +297,12 @@ details summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-top:10
         <div class="chat" id="chatOut" style="margin-top:8px"></div>
       </div>
     </section>
-    <section class="box">
-      <h2>Hunt observations</h2>
-      <div class="lbl">Base speed you saw during a hunt (pick all you've seen)</div>
-      <div class="chips" id="speedChips"></div>
-      <div class="lbl">Line-of-sight speed-up (gets gradually faster while chasing you)</div>
-      <div class="chips" id="losChips"></div>
-      <div class="lbl">Highest average sanity a hunt started at</div>
-      <div class="row"><input type="number" id="huntSan" min="0" max="100" placeholder="%" aria-label="Highest average sanity at a hunt"><span class="note" style="margin:0">Leave blank if unsure. Ignore hunts forced by cursed possessions.</span></div>
-      <div class="lbl">Footstep tapper</div>
-      <div class="row"><button class="btn" id="tapBtn">Tap on each footstep <kbd id="tapKey">F</kbd></button><span class="timer" id="bpm">— BPM</span><button class="btn" id="tapReset">Clear</button></div>
-      <p class="note" id="tapVerdict">During a hunt, tap along with the ghost's footsteps from a hiding spot. Four or more taps gives a reading.</p>
-      <div id="tapUse"></div>
-      <p class="note" id="speedNote"></p>
-    </section>
-
-    <section class="box" id="qBox">
-      <h2>Deduction questions</h2>
-      <p class="sub" id="qSub">Answer what you've seen. Each answer only rules ghosts out when the behaviour is certain. Skip anything you're unsure of.</p>
-      <div id="hints"></div>
-      <div id="qs"></div>
-    </section>
-
-    <section class="box" id="smBox">
-      <h2>Smudge timer</h2>
-      <p class="sub">Start when you smudge the ghost. Hunts before 90 s point to a Demon; before 180 s rules out a Spirit.</p>
-      <div class="row"><span class="timer" id="tm">0:00</span><button class="btn" id="tmBtn">Start</button><button class="btn" id="tmReset">Reset</button></div>
-      <div class="marks" id="tmMarks"><span data-t="60">60 s Demon</span> · <span data-t="90">90 s most ghosts</span> · <span data-t="180">180 s Spirit</span></div>
-    </section>
+    </div>
   </div>
-
-  <div class="col">
-    <div class="boardhead"><h2 id="boardTitle">Possible ghosts</h2><span class="note" style="margin:0">Underlined evidence is always shown when evidence is reduced (Nightmare, Insanity, custom 1–2). Click a card's button to rule it out by hand.</span></div>
-    <div class="board" id="board"></div>
-  </div>
-</main>
+</div>
 
 <script>
+
 const EV={emf:"EMF 5",uv:"Ultraviolet",writing:"Ghost Writing",freezing:"Freezing",dots:"D.O.T.S.",orb:"Ghost Orb",box:"Spirit Box"};
 const EVK=["emf","uv","writing","freezing","dots","orb","box"];
 const DIFFS=[
@@ -270,7 +311,7 @@ const DIFFS=[
  {id:"custom",n:"Custom",e:null}];
 // speeds: s slow(<1.7) n normal(1.7) f fast(>1.7, not counting LOS). los: yes / no / both. sp: [min,max] m/s for display scaling.
 const G=[
- {id:"aswang",n:"Aswang",ev:["dots","freezing","writing"],hunt:"50%",max:50,spd:"{1.53} m/s base; fastest line-of-sight acceleration of any ghost",s:"s",los:"yes",
+ {id:"aswang",n:"Aswang",ev:["dots","freezing","writing"],hunt:"50%",max:50,spd:"{1.53} m/s base; fastest line-of-sight acceleration of any ghost",s:"sn",los:"yes",
   t:["A hunt ends without a kill if it reaches a player in an official closet or locker","Its next hunt heads straight for that player","Can move during the hunt grace period"]},
  {id:"banshee",n:"Banshee",ev:["orb","uv","dots"],hunt:"50% of its target's sanity (not the average)",max:100,spd:"{1.7} m/s",s:"n",los:"yes",
   t:["Always female","Unique shriek on the parabolic mic / sound recorder","More singing ghost events; hunts one target"]},
@@ -300,7 +341,7 @@ const G=[
   t:["Hunt footsteps and vocals only audible within ~12 m (others 20 m)","Frequent paranormal sounds on the parabolic mic"]},
  {id:"obake",n:"Obake",ev:["emf","orb","uv"],f:"uv",hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
   t:["Sometimes leaves six-finger prints","Briefly changes model during a hunt","Prints can fade faster or not appear"]},
- {id:"obambo",n:"Obambo",ev:["writing","uv","dots"],hunt:"65% aggressive, 10% calm",max:65,spd:"{1.955} aggressive, {1.445} calm",s:"sf",los:"both",
+ {id:"obambo",n:"Obambo",ev:["writing","uv","dots"],hunt:"65% aggressive, 10% calm",max:65,spd:"{1.955} aggressive, {1.445} calm",s:"snf",los:"both",
   t:["Switches between calm and aggressive about every 2 minutes","Aggressive hunts are shorter"]},
  {id:"oni",n:"Oni",ev:["dots","emf","freezing"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
   t:["Never does the airball ghost event","More visible during hunts","More active with players nearby"]},
@@ -322,7 +363,7 @@ const G=[
   t:["Very active early, ages and slows over time near players"]},
  {id:"mimic",n:"The Mimic",ev:["box","uv","freezing"],hunt:"Copies the ghost it's mimicking",max:100,spd:"Copies the ghost it's mimicking",s:"snf",los:"both",
   t:["Always shows fake Ghost Orbs as an extra, even on 0 evidence","Changes which ghost it copies every 30–120 s"]},
- {id:"twins",n:"The Twins",ev:["emf","freezing","box"],hunt:"50%",max:50,spd:"{1.5} m/s or {1.9} m/s depending on which twin hunts",s:"sf",los:"yes",
+ {id:"twins",n:"The Twins",ev:["emf","freezing","box"],hunt:"50%",max:50,spd:"{1.5} m/s or {1.9} m/s depending on which twin hunts",s:"snf",los:"both",
   t:["Two interactions at almost the same time in different places"]},
  {id:"wraith",n:"Wraith",ev:["dots","emf","box"],hunt:"50%",max:50,spd:"{1.7} m/s",s:"n",los:"yes",
   t:["Never steps in salt","Teleports to players (EMF 2 near them)"]},
@@ -348,7 +389,7 @@ const QS=[
  {id:"photo",q:"You photographed the ghost during an event. Did it vanish when the photo was taken?",a:[{l:"Vanished",hint:["phantom"]},{l:"Stayed visible",elim:["phantom"]},{l:"No photo yet"}]},
  {id:"obake",q:"Did you see a six-finger print, or the ghost change model for a moment mid-hunt?",a:[{l:"Yes",hint:["obake"]},{l:"No"}]},
  {id:"shade",q:"Did a hunt start while a player was standing in the ghost's room?",a:[{l:"Yes",elim:["shade"]},{l:"No / unsure"}]},
- {id:"smudge",q:"After smudging the ghost, when did it next hunt? (use the timer)",a:[{l:"Under 90 s",elim:NOT("demon")},{l:"90–180 s",elim:["spirit"]},{l:"After 180 s / no hunt"}]},
+ {id:"smudge",q:"After smudging the ghost, when did it next hunt? Ignore hunts from cursed items. (use the timer)",a:[{l:"Under 90 s",elim:NOT("demon")},{l:"90–180 s",elim:["spirit"]},{l:"After 180 s / no hunt"}]},
  {id:"myling",q:"Could you hear its hunt footsteps or vocals from further than ~12 m away?",a:[{l:"Yes",elim:["myling"]},{l:"Only up close",hint:["myling"]},{l:"Unsure"}]},
  {id:"dotseye",q:"Did you see the D.O.T.S. silhouette with your own eyes (not on camera)?",a:[{l:"Yes",elim:["goryo"]},{l:"Only on camera",hint:["goryo"]},{l:"Not seen"}]},
  {id:"twins",q:"Did two interactions happen at almost the same moment in different places?",a:[{l:"Yes",hint:["twins"]},{l:"No"}]},
@@ -384,7 +425,7 @@ function behVerdict(g){
   if(S.speeds.size){ for(const sp of S.speeds) if(!g.s.includes(sp)) return `can't hunt at that speed`; }
   if(S.los==="yes"&&g.los==="no") return "no line-of-sight speed-up";
   if(S.los==="no"&&g.los==="yes") return "always speeds up with line of sight";
-  if(S.hunt!=null&&S.hunt>g.max) return `can't hunt above ${g.max}%`;
+  if(S.hunt!=null&&S.hunt>g.max+3) return `can't hunt above ${g.max}%`;
   for(const q of QS){ const a=S.ans[q.id]; if(a==null) continue; const ans=q.a[a];
     if(ans.elim&&ans.elim.includes(g.id)) return `ruled out: "${ans.l}" on ${q.id==="smudge"?"smudge timing":"a question"}`; }
   return null;
@@ -414,7 +455,7 @@ function render(){
   $("hints").innerHTML=hinted.length?`<div class="hintbar" style="margin-bottom:8px">Strong tells for: ${hinted.map(r=>r.g.n).join(", ")}</div>`:"";
   // board
   rows.sort((a,b)=>(!!a.why-!!b.why)||(b.h.length-a.h.length)||a.g.n.localeCompare(b.g.n));
-  $("boardTitle").textContent=alive.length===1?`It's the ${alive[0].g.n}`:alive.length?"Possible ghosts":"No match";
+  $("boardTitle").textContent=alive.length===1?`It's ${/^The /.test(alive[0].g.n)?"":"the "}${alive[0].g.n}`:alive.length?"Possible ghosts":"No match";
   $("board").innerHTML=rows.map(({g,why,h})=>{
     const tags=g.ev.map(k=>`<span class="tag ${S.ev[k]==="f"?"f":S.ev[k]==="x"?"x":""} ${g.f===k?"forced":""}">${EV[k]}</span>`).join("")+(g.id==="mimic"?`<span class="tag ${S.ev.orb==="f"?"f":S.ev.orb==="x"?"x":""}">+ fake Orbs</span>`:"");
     return `<article class="card ${why?"out":""} ${!why&&alive.length===1?"lead":""} ${!why&&h.length?"hinted":""}">
@@ -424,7 +465,7 @@ function render(){
      <dl class="stats"><dt>HUNTS</dt><dd>${g.hunt}</dd><dt>SPEED</dt><dd>${fmtSpeed(g.spd)}</dd><dt>LOS</dt><dd>${g.los==="yes"?"Speeds up with line of sight":g.los==="no"?"No line-of-sight speed-up":"Depends on its state"}</dd></dl>
      <ul class="tells">${g.t.map(t=>`<li>${t}</li>`).join("")}</ul></article>`;}).join("");
   // chips
-  $("speedChips").innerHTML=[["s","Slow (under 1.7)"],["n","Normal (1.7)"],["f","Fast (over 1.7, from the start)"]].map(([k,l])=>`<button class="chip ${S.speeds.has(k)?"on":""}" data-sp="${k}">${l}</button>`).join("");
+  $("speedChips").innerHTML=[["s","Clearly slow"],["n","About normal"],["f","Clearly fast (from the start)"]].map(([k,l])=>`<button class="chip ${S.speeds.has(k)?"on":""}" data-sp="${k}">${l}</button>`).join("");
   $("losChips").innerHTML=[["yes","Yes, it sped up"],["no","No, steady speed"]].map(([k,l])=>`<button class="chip ${S.los===k?"on":""}" data-los="${k}">${l}</button>`).join("");
   $("speedNote").textContent=S.speedMod!==1?`Ghost speed is set to ${S.speedMod*100}%. Speeds on the cards are already scaled; "normal" means ${(1.7*S.speedMod).toFixed(2)} m/s.`:"Normal ghost speed is 1.7 m/s. Footstep rhythm is the easiest way to judge it.";
   // questions
@@ -432,7 +473,7 @@ function render(){
   $("qSub").textContent=N<=1?"With little or no evidence these do most of the work. Each answer only rules ghosts out when the behaviour is certain; skip anything you're unsure of.":"Answer what you've seen. Each answer only rules ghosts out when the behaviour is certain. Skip anything you're unsure of.";
   document.body.classList.toggle("compact",S.compact);
   // move questions up on low evidence
-  const col=$("qBox").parentElement; if(N<=1) col.insertBefore($("qBox"),col.children[1]); else col.insertBefore($("qBox"),$("smBox"));
+  
 }
 
 // difficulty modal
@@ -595,9 +636,9 @@ function showAI(r){
   let h=`<div class="seen">${esc(r.seen)}</div>`;
   if(Array.isArray(r.observations)&&r.observations.length) h+=`<ul>${r.observations.map(o=>`<li>${esc(o)}</li>`).join("")}</ul>`;
   if(evs.length||ans.length||ro.length){
-    h+=`<div class="grp">Suggested updates (untick any you disagree with)</div>`;
-    h+=evs.map((x,i)=>`<label><input type="checkbox" data-aev="${i}" checked> Mark ${esc(EV[x.type])} as ${x.state==="found"?"found":"ruled out"}: ${esc(x.why)}</label>`).join("");
-    h+=ans.map((a,i)=>{const q=QS.find(q=>q.id===a.q);return `<label><input type="checkbox" data-aans="${i}" checked> ${esc(q.q)} → <b>${esc(q.a[+a.a].l)}</b>: ${esc(a.why)}</label>`;}).join("");
+    h+=`<div class="grp">Suggested updates (tick the ones you agree with)</div>`;
+    h+=evs.map((x,i)=>`<label><input type="checkbox" data-aev="${i}"> Mark ${esc(EV[x.type])} as ${x.state==="found"?"found":"ruled out"}: ${esc(x.why)}</label>`).join("");
+    h+=ans.map((a,i)=>{const q=QS.find(q=>q.id===a.q);return `<label><input type="checkbox" data-aans="${i}"> ${esc(q.q)} → <b>${esc(q.a[+a.a].l)}</b>: ${esc(a.why)}</label>`;}).join("");
     h+=ro.map((x,i)=>`<label><input type="checkbox" data-aro="${i}"> Rule out ${esc(gName(x.ghost))}: ${esc(x.why)}</label>`).join("");
     h+=`<div class="row"><button class="btn primary" id="applyAI">Apply selected</button></div>`;
   }
@@ -625,38 +666,6 @@ async function askChat(){
 $("chatBtn").onclick=askChat;
 $("chatIn").onkeydown=e=>{ if(e.key==="Enter") askChat(); };
 initAI();
-
-// ---------- Desktop app: OBS panel ----------
-(function(){
-  const P=window.phasmo; if(!P) return;
-  $("obsBox").hidden=false; $("aiBox").hidden=true;
-  const keyName=a=>String(a||"").replace(/CommandOrControl|CmdOrCtrl/g,"Ctrl");
-  const toAccel=a=>String(a||"").trim().replace(/\bCtrl\b/gi,"CommandOrControl");
-  P.onStatus(st=>{
-    $("obsDot").classList.toggle("on",!!st.connected);
-    $("obsText").textContent=st.connected?"Connected to OBS. Replay buffer is recording.":(st.obsPath?"Not connected to OBS.":"OBS wasn't found on this PC.");
-    $("saveKey").textContent=keyName(st.saveHotkey);
-    if(st.lastClip){ $("obsShow").disabled=false; $("clipInfo").innerHTML=`Latest clip${st.saved?` (saved ${new Date(st.saved).toLocaleTimeString([], {hour:"numeric",minute:"2-digit",second:"2-digit"})})`:""}:<br><span class="clipname"></span>`; $("clipInfo").querySelector(".clipname").textContent=st.lastClip; }
-    else if(st.saving) $("clipInfo").textContent="Saving clip…";
-    $("obsErr").innerHTML=st.error?'<div class="warn" style="margin-top:8px"></div>':"";
-    if(st.error) $("obsErr").firstChild.textContent=st.error;
-  });
-  $("obsStart").onclick=async()=>{ $("obsText").textContent="Starting OBS…"; await P.launchObs(); };
-  $("obsSave").onclick=()=>P.saveClip();
-  $("gameStart").onclick=()=>P.launchGame();
-  $("obsShow").onclick=()=>P.showClip();
-  $("askOnline").onclick=async()=>{ await P.showClip(); await P.openSite(); };
-  async function loadSet(){ const c=await P.getSettings();
-    $("sObs").value=c.obsPath||""; $("sObs").placeholder=c.detectedObs?("found: "+c.detectedObs):"not found, use Browse";
-    $("sPort").value=c.port; $("sPw").value=c.password; $("sSave").value=keyName(c.saveHotkey); $("sToggle").value=keyName(c.toggleHotkey);
-    $("sOp").value=c.opacity; $("sAuto").checked=!!c.autoStartObs; $("sGame").checked=!!c.autoStartGame; $("sTop").checked=!!c.alwaysOnTop; $("sShow").checked=!!c.showClipAfterSave; }
-  loadSet();
-  $("sBrowse").onclick=async()=>{ const p=await P.browseObs(); if(p) $("sObs").value=p; };
-  $("sOp").oninput=e=>P.setOpacity(e.target.value);
-  $("sApply").onclick=async()=>{ $("sMsg").textContent="Saving…";
-    await P.setSettings({obsPath:$("sObs").value.trim(),port:+$("sPort").value,password:$("sPw").value,saveHotkey:toAccel($("sSave").value),toggleHotkey:toAccel($("sToggle").value),opacity:+$("sOp").value,autoStartObs:$("sAuto").checked,autoStartGame:$("sGame").checked,alwaysOnTop:$("sTop").checked,showClipAfterSave:$("sShow").checked});
-    $("sMsg").textContent="Saved."; loadSet(); };
-})();
 
 // ---------- footstep tapper ----------
 let taps=[];
@@ -689,6 +698,142 @@ $("tapReset").onclick=()=>{taps=[];drawTaps();$("tapVerdict").textContent="Durin
 if(window.phasmo&&window.phasmo.onTap){ window.phasmo.onTap(tap); $("tapKey").textContent="F8"; $("tapBtn").title="F8 works even while the game is focused"; }
 
 drawDiff(); render();
-</script>
 
+</script>
+<script>
+// Overlay behaviour on top of the shared finder script: panels, search, size, HUD, OBS and settings.
+(function () {
+  const P = window.phasmo;
+  const keyName = (a) => String(a || "").replace(/CommandOrControl|CmdOrCtrl/g, "Ctrl");
+  const toAccel = (a) => String(a || "").trim().replace(/\bCtrl\b/gi, "CommandOrControl");
+  let overlayKey = "Insert";
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
+  };
+
+  // The online-only Ask Claude panel has no use inside the app.
+  $("aiBox").hidden = true;
+
+  // ---- collapsible panels (remembered) ----
+  let collapsed = store.get("pgf.collapsed", {});
+  document.querySelectorAll("#ov section.box").forEach((sec) => {
+    if (collapsed[sec.id]) sec.classList.add("collapsed");
+    const h = sec.querySelector(":scope > h2");
+    if (!h) return;
+    h.tabIndex = 0; h.setAttribute("role", "button"); h.title = "Click to open or close this panel";
+    const toggle = () => {
+      sec.classList.toggle("collapsed");
+      collapsed[sec.id] = sec.classList.contains("collapsed");
+      store.set("pgf.collapsed", collapsed);
+    };
+    h.addEventListener("click", toggle);
+    h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  });
+  $("layoutReset").onclick = () => {
+    collapsed = {}; store.set("pgf.collapsed", collapsed);
+    document.querySelectorAll("#ov section.box.collapsed").forEach((s) => s.classList.remove("collapsed"));
+  };
+
+  // ---- ghost cards: click a name for details; search box ----
+  const open = new Set();
+  function decorate() {
+    const q = $("gsearch").value.trim().toLowerCase();
+    document.querySelectorAll("#board .card").forEach((c) => {
+      const n = c.querySelector(".gname").textContent;
+      c.classList.toggle("open", open.has(n));
+      c.classList.toggle("nomatch", !!q && !n.toLowerCase().includes(q));
+    });
+  }
+  $("board").addEventListener("click", (e) => {
+    const n = e.target.closest(".gname");
+    if (!n) return;
+    const k = n.textContent;
+    open.has(k) ? open.delete(k) : open.add(k);
+    decorate();
+  });
+  $("gsearch").addEventListener("input", decorate);
+  $("gsearch").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("gsearch").value) { e.stopPropagation(); $("gsearch").value = ""; decorate(); } });
+
+  // ---- corner info box (HUD) ----
+  function hudData() {
+    const alive = computeRows().filter((r) => !r.why);
+    return {
+      diff: S.diff ? S.diff.n : null, evi: S.evi,
+      found: EVK.filter((k) => S.ev[k] === "f").map((k) => EV[k]),
+      ruled: EVK.filter((k) => S.ev[k] === "x").map((k) => EV[k]),
+      remain: alive.length, names: alive.map((r) => r.g.n),
+      bpm: /BPM/.test($("bpm").textContent) ? $("bpm").textContent : "",
+      timer: tmI ? $("tm").textContent : "",
+      key: keyName(overlayKey)
+    };
+  }
+  const sendHud = () => { if (P) P.hudUpdate(hudData()); };
+  setInterval(sendHud, 1000);
+
+  // Every redraw of the finder also refreshes the cards' open/search state and the HUD.
+  const baseRender = render;
+  render = function () { baseRender(); decorate(); sendHud(); };
+  render();
+
+  if (!P) return; // opened outside the app: the panels still work, the app parts don't
+
+  // ---- open / close ----
+  const back = () => P.hideOverlay();
+  $("closeOv").onclick = back;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("modal").hidden) back(); });
+  P.onShown(() => { if (document.activeElement) document.activeElement.blur(); });
+
+  // ---- size ----
+  const showZoom = (z) => { $("zReset").textContent = Math.round(z * 100) + "%"; };
+  $("zOut").onclick = async () => showZoom(await P.zoom(-0.1));
+  $("zIn").onclick = async () => showZoom(await P.zoom(0.1));
+  $("zReset").onclick = async () => showZoom(await P.zoom(0));
+
+  // ---- OBS panel ----
+  P.onStatus((st) => {
+    overlayKey = st.overlayHotkey || overlayKey;
+    $("ovKey").textContent = keyName(st.overlayHotkey);
+    $("saveKey").textContent = keyName(st.saveHotkey);
+    $("tapKey").textContent = keyName(st.tapHotkey);
+    $("obsDot").classList.toggle("on", !!st.connected);
+    $("obsText").textContent = st.connected ? "Connected to OBS. Replay buffer is recording." : (st.obsPath ? "Not connected to OBS." : "OBS wasn't found on this PC.");
+    if (st.lastClip) {
+      $("obsShow").disabled = false;
+      $("clipInfo").innerHTML = `Latest clip${st.saved ? ` (saved ${new Date(st.saved).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })})` : ""}:<br><span class="clipname"></span>`;
+      $("clipInfo").querySelector(".clipname").textContent = st.lastClip;
+    } else if (st.saving) $("clipInfo").textContent = "Saving clip…";
+    $("obsErr").innerHTML = st.error ? '<div class="warn" style="margin-top:8px"></div>' : "";
+    if (st.error) $("obsErr").firstChild.textContent = st.error;
+  });
+  $("obsStart").onclick = async () => { $("obsText").textContent = "Starting OBS…"; await P.launchObs(); };
+  $("gameStart").onclick = () => P.launchGame();
+  $("obsSave").onclick = () => P.saveClip();
+  $("obsShow").onclick = () => P.showClip();
+  $("askOnline").onclick = async () => { await P.showClip(); await P.openSite(); };
+
+  // ---- settings ----
+  async function loadSet() {
+    const c = await P.getSettings();
+    $("sOverlay").value = keyName(c.overlayHotkey); $("sSave").value = keyName(c.saveHotkey); $("sTap").value = keyName(c.tapHotkey);
+    $("sObs").value = c.obsPath || ""; $("sObs").placeholder = c.detectedObs ? "found: " + c.detectedObs : "not found, use Browse";
+    $("sPort").value = c.port; $("sPw").value = c.password;
+    $("sAuto").checked = !!c.autoStartObs; $("sGame").checked = !!c.autoStartGame; $("sHud").checked = !!c.showHud; $("sShow").checked = !!c.showClipAfterSave;
+    showZoom(c.zoom || 1);
+  }
+  loadSet();
+  $("sBrowse").onclick = async () => { const p = await P.browseObs(); if (p) $("sObs").value = p; };
+  $("sApply").onclick = async () => {
+    $("sMsg").textContent = "Saving…";
+    await P.setSettings({
+      overlayHotkey: toAccel($("sOverlay").value), saveHotkey: toAccel($("sSave").value), tapHotkey: toAccel($("sTap").value),
+      obsPath: $("sObs").value.trim(), port: +$("sPort").value, password: $("sPw").value,
+      autoStartObs: $("sAuto").checked, autoStartGame: $("sGame").checked, showHud: $("sHud").checked, showClipAfterSave: $("sShow").checked
+    });
+    $("sMsg").textContent = "Saved."; loadSet();
+  };
+  $("quitApp").onclick = () => P.quit();
+})();
+
+</script>
 </body></html>

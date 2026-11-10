@@ -1,12 +1,14 @@
 {
   "name": "phasmo-ghost-finder",
   "version": "1.0.0",
-  "description": "Always-on-top Phasmophobia ghost finder that starts OBS and saves replay clips on a hotkey.",
+  "description": "In-game overlay for Phasmophobia: a ghost finder you open with one key, plus OBS replay clips on a hotkey.",
   "main": "main.js",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis portable --publish never"
+    "dist": "electron-builder --win nsis portable --publish never",
+    "test": "xvfb-run -a -s \"-screen 0 1920x1080x24\" electron test/harness.js --no-sandbox --disable-gpu",
+    "build:overlay": "python3 scripts/build_overlay.py"
   },
   "dependencies": {
     "obs-websocket-js": "5.0.6"
@@ -18,9 +20,24 @@
   "build": {
     "appId": "com.phasmo.ghostfinder",
     "productName": "Phasmo Ghost Finder",
-    "files": ["main.js", "preload.js", "renderer/**", "package.json"],
-    "win": { "target": ["nsis", "portable"] },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
-    "portable": { "artifactName": "PhasmoGhostFinder-portable-${version}.exe" }
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "PhasmoGhostFinder-portable-${version}.exe"
+    }
   }
 }
