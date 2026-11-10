@@ -13,6 +13,7 @@ const DEFAULTS = {
   port: 4455,
   password: "",
   autoStartObs: true,
+  autoStartGame: false,
   showClipAfterSave: false,
   saveHotkey: "CommandOrControl+Shift+S",
   toggleHotkey: "CommandOrControl+Shift+H",
@@ -187,10 +188,11 @@ ipcMain.handle("obs:launch", async () => { const ok = await launchObs(); if (ok)
 ipcMain.handle("obs:connect", () => connectObs());
 ipcMain.handle("obs:save", () => saveClip());
 ipcMain.handle("clip:show", () => { if (lastClip && fs.existsSync(lastClip)) { shell.showItemInFolder(lastClip); return true; } return false; });
+ipcMain.handle("game:launch", () => { shell.openExternal("steam://rungameid/739630"); return true; });
 ipcMain.handle("site:open", () => { shell.openExternal(cfg.websiteUrl); return true; });
 ipcMain.handle("cfg:get", () => ({ ...cfg, password: cfg.password ? "********" : "", hasPassword: !!cfg.password, detectedObs: findObs() }));
 ipcMain.handle("cfg:set", async (_e, patch) => {
-  const allowed = ["obsPath", "host", "port", "password", "autoStartObs", "showClipAfterSave", "saveHotkey", "toggleHotkey", "alwaysOnTop", "opacity", "websiteUrl"];
+  const allowed = ["obsPath", "host", "port", "password", "autoStartObs", "autoStartGame", "showClipAfterSave", "saveHotkey", "toggleHotkey", "alwaysOnTop", "opacity", "websiteUrl"];
   for (const k of allowed) if (patch && Object.prototype.hasOwnProperty.call(patch, k)) {
     if (k === "password" && patch.password === "********") continue;
     cfg[k] = k === "port" ? Number(patch.port) || 4455 : k === "opacity" ? Number(patch.opacity) || 1 : patch[k];
@@ -220,8 +222,16 @@ else {
     loadCfg();
     createWindow();
     registerHotkeys();
-    if (cfg.autoStartObs) { if (await launchObs()) await connectObs({ waitForStart: true }); }
-    else await connectObs();
+    if (cfg.autoStartObs) {
+      if (await launchObs()) {
+        await connectObs({ waitForStart: true });
+        // Start the game after OBS so Game Capture can hook it as it opens.
+        if (cfg.autoStartGame) shell.openExternal("steam://rungameid/739630");
+      }
+    } else {
+      if (cfg.autoStartGame) shell.openExternal("steam://rungameid/739630");
+      await connectObs();
+    }
     pushStatus();
   });
   app.on("will-quit", () => { globalShortcut.unregisterAll(); try { obs.disconnect(); } catch {} });

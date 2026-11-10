@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("phasmo", {
   connectObs: () => ipcRenderer.invoke("obs:connect"),
   saveClip: () => ipcRenderer.invoke("obs:save"),
   showClip: () => ipcRenderer.invoke("clip:show"),
+  launchGame: () => ipcRenderer.invoke("game:launch"),
   openSite: () => ipcRenderer.invoke("site:open"),
   getSettings: () => ipcRenderer.invoke("cfg:get"),
   setSettings: (patch) => ipcRenderer.invoke("cfg:set", patch),

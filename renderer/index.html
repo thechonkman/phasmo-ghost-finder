@@ -161,6 +161,7 @@ details summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-top:10
       <p class="sub" id="obsState"><span class="dot" id="obsDot"></span><span id="obsText">Connecting to OBS…</span></p>
       <div class="row">
         <button class="btn" id="obsStart">Start OBS</button>
+        <button class="btn" id="gameStart">Start Phasmophobia</button>
         <button class="btn primary" id="obsSave">Save clip <kbd id="saveKey">Ctrl+Shift+S</kbd></button>
         <button class="btn" id="obsShow" disabled>Show clip</button>
       </div>
@@ -178,6 +179,7 @@ details summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-top:10
           <label for="sOp">Window opacity</label><input type="range" id="sOp" min="0.3" max="1" step="0.05">
         </div>
         <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sAuto"> Start OBS when this app opens</label>
+        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sGame"> Start Phasmophobia (Steam) when this app opens</label>
         <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sTop"> Keep this window on top of the game</label>
         <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sShow"> Open the clip's folder after each save</label>
         <p class="note">Hotkeys use names like Ctrl+Shift+S, Alt+F9 or F8.</p>
@@ -639,17 +641,18 @@ initAI();
   });
   $("obsStart").onclick=async()=>{ $("obsText").textContent="Starting OBS…"; await P.launchObs(); };
   $("obsSave").onclick=()=>P.saveClip();
+  $("gameStart").onclick=()=>P.launchGame();
   $("obsShow").onclick=()=>P.showClip();
   $("askOnline").onclick=async()=>{ await P.showClip(); await P.openSite(); };
   async function loadSet(){ const c=await P.getSettings();
     $("sObs").value=c.obsPath||""; $("sObs").placeholder=c.detectedObs?("found: "+c.detectedObs):"not found, use Browse";
     $("sPort").value=c.port; $("sPw").value=c.password; $("sSave").value=keyName(c.saveHotkey); $("sToggle").value=keyName(c.toggleHotkey);
-    $("sOp").value=c.opacity; $("sAuto").checked=!!c.autoStartObs; $("sTop").checked=!!c.alwaysOnTop; $("sShow").checked=!!c.showClipAfterSave; }
+    $("sOp").value=c.opacity; $("sAuto").checked=!!c.autoStartObs; $("sGame").checked=!!c.autoStartGame; $("sTop").checked=!!c.alwaysOnTop; $("sShow").checked=!!c.showClipAfterSave; }
   loadSet();
   $("sBrowse").onclick=async()=>{ const p=await P.browseObs(); if(p) $("sObs").value=p; };
   $("sOp").oninput=e=>P.setOpacity(e.target.value);
   $("sApply").onclick=async()=>{ $("sMsg").textContent="Saving…";
-    await P.setSettings({obsPath:$("sObs").value.trim(),port:+$("sPort").value,password:$("sPw").value,saveHotkey:toAccel($("sSave").value),toggleHotkey:toAccel($("sToggle").value),opacity:+$("sOp").value,autoStartObs:$("sAuto").checked,alwaysOnTop:$("sTop").checked,showClipAfterSave:$("sShow").checked});
+    await P.setSettings({obsPath:$("sObs").value.trim(),port:+$("sPort").value,password:$("sPw").value,saveHotkey:toAccel($("sSave").value),toggleHotkey:toAccel($("sToggle").value),opacity:+$("sOp").value,autoStartObs:$("sAuto").checked,autoStartGame:$("sGame").checked,alwaysOnTop:$("sTop").checked,showClipAfterSave:$("sShow").checked});
     $("sMsg").textContent="Saved."; loadSet(); };
 })();
 
