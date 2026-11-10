@@ -10,6 +10,8 @@ const { default: OBSWebSocket, EventSubscription } = require("obs-websocket-js/j
 const { autoUpdater } = require("electron-updater");
 
 const STEAM_GAME = "steam://rungameid/739630";
+const GAME_EXE = "Phasmophobia.exe";
+const OBS_EXE = "obs64.exe";
 const DEFAULTS = {
   obsPath: "",
   host: "127.0.0.1",
@@ -19,6 +21,8 @@ const DEFAULTS = {
   autoStartGame: false,
   showClipAfterSave: false,
   showHud: true,
+  closeWithGame: true,   // when Phasmophobia closes, close OBS and this app
+  closeObsToo: true,     // closing everything also closes OBS
   saveHotkey: "CommandOrControl+Shift+S",
   overlayHotkey: "Insert",
   tapHotkey: "F8",
@@ -120,15 +124,36 @@ function pushStatus(extra = {}) {
   send(hud, "obs:status", st);
 }
 
-// ---------- OBS process ----------
-function obsRunning() {
+// ---------- processes (game and OBS) ----------
+// Tests set PGF_FAKE_PROCS to a file listing "running" programs, so this works without Windows.
+const FAKE_PROCS = process.env.PGF_FAKE_PROCS || "";
+const fakeList = () => { try { return fs.readFileSync(FAKE_PROCS, "utf8").split(",").map((x) => x.trim()).filter(Boolean); } catch { return []; } };
+function procRunning(exe) {
+  if (FAKE_PROCS) return Promise.resolve(fakeList().some((x) => x.toLowerCase() === exe.toLowerCase()));
   return new Promise((resolve) => {
     if (process.platform !== "win32") return resolve(false);
-    execFile("tasklist", ["/FI", "IMAGENAME eq obs64.exe", "/NH"], { windowsHide: true }, (err, out) => {
-      resolve(!err && /obs64\.exe/i.test(String(out)));
+    execFile("tasklist", ["/FI", `IMAGENAME eq ${exe}`, "/NH"], { windowsHide: true }, (err, out) => {
+      resolve(!err && String(out).toLowerCase().includes(exe.toLowerCase()));
     });
   });
 }
+function procClose(exe, force) {
+  if (FAKE_PROCS) { fs.writeFileSync(FAKE_PROCS, fakeList().filter((x) => x.toLowerCase() !== exe.toLowerCase()).join(",")); return Promise.resolve(); }
+  return new Promise((resolve) => {
+    if (process.platform !== "win32") return resolve();
+    // Without /F Windows asks the program to close normally, like clicking its X.
+    execFile("taskkill", ["/IM", exe, "/T", ...(force ? ["/F"] : [])], { windowsHide: true }, () => resolve());
+  });
+}
+async function closeAndWait(exe, ms = 10000) {
+  if (!(await procRunning(exe))) return true;
+  await procClose(exe, false);
+  for (let t = 0; t < ms; t += 500) { await new Promise((r) => setTimeout(r, 500)); if (!(await procRunning(exe))) return true; }
+  await procClose(exe, true); // still open (for example stuck on a dialog): force it
+  await new Promise((r) => setTimeout(r, 800));
+  return !(await procRunning(exe));
+}
+const obsRunning = () => procRunning(OBS_EXE);
 async function launchObs() {
   if (await obsRunning()) return true;
   const exe = findObs();
@@ -308,10 +333,11 @@ ipcMain.handle("ov:zoom", (_e, step) => {
   return cfg.zoom;
 });
 ipcMain.handle("app:quit", () => { quitting = true; app.quit(); return true; });
+ipcMain.handle("app:closeAll", () => { closeEverything({ game: true }); return true; });
 ipcMain.on("hud:update", (_e, data) => send(hud, "hud:data", data));
 ipcMain.handle("cfg:get", () => ({ ...cfg, password: cfg.password ? "********" : "", hasPassword: !!cfg.password, detectedObs: findObs() }));
 ipcMain.handle("cfg:set", async (_e, patch) => {
-  const allowed = ["obsPath", "host", "port", "password", "autoStartObs", "autoStartGame", "showClipAfterSave", "showHud", "saveHotkey", "overlayHotkey", "tapHotkey", "websiteUrl"];
+  const allowed = ["obsPath", "host", "port", "password", "autoStartObs", "autoStartGame", "showClipAfterSave", "showHud", "closeWithGame", "closeObsToo", "saveHotkey", "overlayHotkey", "tapHotkey", "websiteUrl"];
   for (const k of allowed) if (patch && Object.prototype.hasOwnProperty.call(patch, k)) {
     if (k === "password" && patch.password === "********") continue;
     cfg[k] = k === "port" ? Number(patch.port) || 4455 : patch[k];
@@ -349,6 +375,36 @@ function setupUpdates() {
   setInterval(check, 30 * 60 * 1000);
 }
 
+// ---------- closing everything ----------
+let closingAll = false;
+async function closeEverything({ game }) {
+  if (closingAll) return;
+  closingAll = true;
+  const say = (msg) => pushStatus({ closing: msg });
+  if (game) { say("Closing Phasmophobia…"); await closeAndWait(GAME_EXE); }
+  if (cfg.closeObsToo) {
+    say("Closing OBS…");
+    // Stop the replay buffer first so OBS closes without asking about active outputs.
+    if (connected) { try { await obs.call("StopReplayBuffer"); } catch {} await new Promise((r) => setTimeout(r, 1200)); }
+    try { await obs.disconnect(); } catch {}
+    await closeAndWait(OBS_EXE);
+  }
+  say("Closing Phasmo Ghost Finder…");
+  quitting = true;
+  app.quit();
+}
+// Watch for the game closing: once it has been seen running, its exit closes OBS and this app.
+let gameSeen = false;
+function watchGame() {
+  const every = Number(process.env.PGF_WATCH_MS) || 5000;
+  setInterval(async () => {
+    if (closingAll) return;
+    const up = await procRunning(GAME_EXE);
+    if (up) gameSeen = true;
+    else if (gameSeen && cfg.closeWithGame) closeEverything({ game: false });
+  }, every);
+}
+
 // ---------- app lifecycle ----------
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
@@ -359,6 +415,7 @@ else {
     createWindows();
     registerHotkeys();
     setupUpdates();
+    watchGame();
     // Start the game a few seconds after OBS so Game Capture is ready, whether or not OBS was found.
     const startGame = () => { if (cfg.autoStartGame) shell.openExternal(STEAM_GAME); };
     if (cfg.autoStartObs) {

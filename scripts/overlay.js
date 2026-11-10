@@ -102,6 +102,7 @@
       $("clipInfo").querySelector(".clipname").textContent = st.lastClip;
     } else if (st.saving) $("clipInfo").textContent = "Saving clip…";
     clips = st.clips || []; drawClips(); drawUpdate(st);
+    if (st.closing) { $("closeAll").disabled = true; $("closeAll").textContent = st.closing; }
     $("obsErr").innerHTML = st.error ? '<div class="warn" style="margin-top:8px"></div>' : "";
     if (st.error) $("obsErr").firstChild.textContent = st.error;
   });
@@ -150,6 +151,7 @@
     $("sObs").value = c.obsPath || ""; $("sObs").placeholder = c.detectedObs ? "found: " + c.detectedObs : "not found, use Browse";
     $("sPort").value = c.port; $("sPw").value = c.password;
     $("sAuto").checked = !!c.autoStartObs; $("sGame").checked = !!c.autoStartGame; $("sHud").checked = !!c.showHud; $("sShow").checked = !!c.showClipAfterSave;
+    $("sCloseGame").checked = !!c.closeWithGame; $("sCloseObs").checked = !!c.closeObsToo;
     showZoom(c.zoom || 1);
   }
   loadSet();
@@ -159,9 +161,21 @@
     await P.setSettings({
       overlayHotkey: toAccel($("sOverlay").value), saveHotkey: toAccel($("sSave").value), tapHotkey: toAccel($("sTap").value),
       obsPath: $("sObs").value.trim(), port: +$("sPort").value, password: $("sPw").value,
-      autoStartObs: $("sAuto").checked, autoStartGame: $("sGame").checked, showHud: $("sHud").checked, showClipAfterSave: $("sShow").checked
+      autoStartObs: $("sAuto").checked, autoStartGame: $("sGame").checked, showHud: $("sHud").checked, showClipAfterSave: $("sShow").checked,
+      closeWithGame: $("sCloseGame").checked, closeObsToo: $("sCloseObs").checked
     });
     $("sMsg").textContent = "Saved."; loadSet();
   };
   $("quitApp").onclick = () => P.quit();
+  // Close everything: click twice so it can't happen by accident.
+  let armClose = false, closeTimer = null;
+  $("closeAll").onclick = () => {
+    if (!armClose) {
+      armClose = true; $("closeAll").textContent = "Click again to close the game, OBS and this app";
+      clearTimeout(closeTimer); closeTimer = setTimeout(() => { armClose = false; $("closeAll").textContent = "Close everything"; }, 5000);
+      return;
+    }
+    clearTimeout(closeTimer); $("closeAll").disabled = true; $("closeAll").textContent = "Closing…";
+    P.closeAll();
+  };
 })();

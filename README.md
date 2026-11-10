@@ -7,6 +7,7 @@ An in-game overlay for Phasmophobia on Windows.
 - **Shows a corner info box while you play.** It lists your difficulty, marked evidence and the ghosts still possible. Clicks pass straight through it to the game.
 - **Records clips.** It starts OBS with its Replay Buffer running. **Ctrl+Shift+S** saves the last 30 seconds from anywhere.
 - **Reads ghost speed from footsteps.** Press **F8** on each footstep during a hunt.
+- **Closes itself.** When you quit Phasmophobia, OBS and the app close a few seconds later. **Close everything** in the overlay closes the game, OBS and the app at once.
 
 It runs offline and costs nothing to use. To have Claude look at a clip, click **Ask Claude about this clip**. That opens the online finder on claude.ai and shows the clip in its folder.
 

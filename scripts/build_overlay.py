@@ -70,6 +70,7 @@ page = f"""<!doctype html>
     <button class="btn" id="compactBtn" aria-pressed="false">Compact</button>
     <button class="btn" id="layoutReset" title="Open every panel">Open all panels</button>
     <button class="btn" id="resetBtn">New contract <kbd>R</kbd></button>
+    <button class="btn" id="closeAll" title="Closes Phasmophobia, OBS and this app">Close everything</button>
     <button class="btn primary" id="closeOv">Back to game <kbd id="ovKey">Insert</kbd></button>
   </div>
   <div class="cols">

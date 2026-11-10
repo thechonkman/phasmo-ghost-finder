@@ -32,6 +32,8 @@ function startFakeObs({ port, password, replayEnabled = true, clipDir = null }) 
           if (!state.replayEnabled) { ok = false; code = 604; } else responseData = { outputActive: state.replayActive };
         } else if (requestType === "StartReplayBuffer") {
           if (!state.replayEnabled) { ok = false; code = 604; } else state.replayActive = true;
+        } else if (requestType === "StopReplayBuffer") {
+          if (!state.replayActive) { ok = false; code = 501; } else state.replayActive = false;
         } else if (requestType === "SaveReplayBuffer") {
           if (!state.replayActive) { ok = false; code = 501; }
         } else { ok = false; code = 204; }

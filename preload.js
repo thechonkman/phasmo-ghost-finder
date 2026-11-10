@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("phasmo", {
   hideOverlay: () => ipcRenderer.invoke("ov:hide"),
   zoom: (step) => ipcRenderer.invoke("ov:zoom", step),
   quit: () => ipcRenderer.invoke("app:quit"),
+  closeAll: () => ipcRenderer.invoke("app:closeAll"),
   hudUpdate: (data) => ipcRenderer.send("hud:update", data),
   getSettings: () => ipcRenderer.invoke("cfg:get"),
   setSettings: (patch) => ipcRenderer.invoke("cfg:set", patch),
